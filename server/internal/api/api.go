@@ -50,6 +50,7 @@ type pressRequest struct {
 	Gesture string `json:"gesture"`
 	Seq     uint64 `json:"seq"`
 	FW      string `json:"fw"`
+	RSSI    int    `json:"rssi"` // Wi-Fi signal at the button in dBm, for the log
 }
 
 type pressResponse struct {
@@ -173,7 +174,7 @@ func (s *Server) press(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	s.Log.Info("press", "device", req.Device, "gesture", req.Gesture, "seq", req.Seq, "status", status)
+	s.Log.Info("press", "device", req.Device, "gesture", req.Gesture, "seq", req.Seq, "status", status, "rssi", req.RSSI)
 	if status == StatusOK {
 		s.Dispatch(req.Device, req.Gesture, action)
 	}

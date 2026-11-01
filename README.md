@@ -8,6 +8,10 @@ A physical Wi-Fi button that talks to your computer. Hold it and speak: the audi
 
 The button is an ESP32-S3 on a small LiPo. It sleeps between presses, wakes on the button, does its job and goes back to sleep. The server is a single Go binary for macOS and Linux.
 
+[Watch a short video](docs/images/vid.mp4) of the button typing a message by voice.
+
+![The parts before stacking: the XIAO board with its antenna, the microphone, the button board and the battery](docs/images/0.jpg)
+
 ![The prototype in a hand, wrapped in white tape with its button showing](docs/images/3.jpg)
 
 ## How it works

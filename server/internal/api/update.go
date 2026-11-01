@@ -66,7 +66,7 @@ func (s *Server) update(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "can't save state", http.StatusInternalServerError)
 		return
 	}
-	s.Log.Info("update check", "device", req.Device, "running", req.FW, "offered", answer.Version)
+	s.Log.Info("update check", "device", req.Device, "running", req.FW, "offered", answer.Version, "rssi", req.RSSI)
 	s.writeSigned(w, device.Key, response)
 }
 

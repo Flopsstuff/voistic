@@ -15,7 +15,7 @@ The button with a microphone, board `voistic-9af4`. It sleeps, wakes on a press 
 | Seeed XIAO ESP32S3 Plus (16 MB flash, 8 MB PSRAM) | processor, Wi-Fi, battery charging |
 | Adafruit IoT Button with NeoPixel BFF | button and colour pixel, sits on the XIAO |
 | SPH0645, a digital MEMS microphone with I²S | voice |
-| LiPo, 150 mAh | power |
+| LiPo, 600 mAh | power |
 
 PlatformIO has no board definition for the Plus, so the project uses `seeed_xiao_esp32s3` with the flash size overridden.
 
@@ -50,7 +50,7 @@ Recording starts at the wake and goes into a 6 MB ring buffer in PSRAM, which ho
 ## Power
 
 - The board is in deep sleep between presses, where the ESP32-S3 itself draws tens of microamps.
-- The NeoPixel is powered from 3V3 all the time and draws current even when dark, so it probably sets the battery life. The estimate is 0.5-1 mA, or 6-12 days on 150 mAh. **Nobody has measured the sleep current**, which takes a multimeter.
+- The NeoPixel is powered from 3V3 all the time and draws current even when dark, so it probably sets the battery life. The estimate is 0.5-1 mA, or 25-50 days on 600 mAh. **Nobody has measured the sleep current**, which takes a multimeter.
 - The charge level can't be read: `ADC_BAT` has no divider, and the charger status isn't wired to a GPIO.
 - The red charge LED is driven by the charger chip, not by firmware.
 

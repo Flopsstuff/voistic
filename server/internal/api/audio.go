@@ -131,7 +131,7 @@ func (s *Server) audio(w http.ResponseWriter, r *http.Request) {
 		s.Log.Warn("recording cut short", "device", id, "path", path, "length", length.Round(time.Millisecond), "err", streamErr)
 		return
 	}
-	s.Log.Info("recording saved", "device", id, "seq", seq, "path", path, "length", length.Round(time.Millisecond))
+	s.Log.Info("recording saved", "device", id, "seq", seq, "path", path, "length", length.Round(time.Millisecond), "rssi", query.Get("rssi"))
 	control.SetWriteDeadline(time.Now().Add(audioIdle))
 	s.writeSigned(w, device.Key, response)
 }

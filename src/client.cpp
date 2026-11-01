@@ -236,7 +236,8 @@ SendResult clientSendPress(const char* gesture) {
   prefs.putULong64(kSeqKey, seq);
 
   const String body = "{\"device\":\"" + clientDeviceId() + "\",\"gesture\":\"" + gesture +
-                      "\",\"seq\":" + String(seq) + ",\"fw\":\"" FW_VERSION "\"}";
+                      "\",\"seq\":" + String(seq) + ",\"fw\":\"" FW_VERSION "\",\"rssi\":" +
+                      String(WiFi.RSSI()) + "}";
   const String signature = sign(key, body);
 
   ServerAddress server;
@@ -283,7 +284,7 @@ UpdateCheck clientCheckUpdate(UpdateOffer& offer) {
   updateSeq = prefs.getULong64(kSeqKey, 0) + 1;
   prefs.putULong64(kSeqKey, updateSeq);
   const String body = "{\"device\":\"" + clientDeviceId() + "\",\"seq\":" + String(updateSeq) +
-                      ",\"fw\":\"" FW_VERSION "\"}";
+                      ",\"fw\":\"" FW_VERSION "\",\"rssi\":" + String(WiFi.RSSI()) + "}";
   String response;
   String responseSignature;
   const int code = post(server, "/v1/update", body, sign(key, body), response, responseSignature);
@@ -387,7 +388,7 @@ bool clientAudioBegin(uint32_t rate) {
   }
   audioSocket.setNoDelay(true);
   const String request = "POST /v1/audio?device=" + device + "&seq=" + seq + "&rate=" + String(rate) +
-                         " HTTP/1.1\r\nHost: " + server.host + "\r\nContent-Type: audio/L16\r\n" +
+                         "&rssi=" + String(WiFi.RSSI()) + " HTTP/1.1\r\nHost: " + server.host + "\r\nContent-Type: audio/L16\r\n" +
                          "Transfer-Encoding: chunked\r\n" + kSignatureHeader + ": " +
                          sign(audioKey, message) + "\r\n\r\n";
   return audioSocket.print(request) == request.length();
