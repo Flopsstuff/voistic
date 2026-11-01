@@ -1,0 +1,5 @@
+.pio/
+server/bin/
+server/dist/
+recordings/
+.DS_Store
