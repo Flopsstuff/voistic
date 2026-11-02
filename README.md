@@ -2,7 +2,7 @@
 
 ![A lighter-sized voice stick next to a laptop, sending speech to a prompt](docs/images/hero.jpg)
 
-*Concept render. The enclosure doesn't exist yet: today's prototype is a stack of boards wrapped in tape, shown below.*
+*Concept render. The real one is 3D printed from the models in [`cad/`](cad), and shown below.*
 
 A physical Wi-Fi button that talks to your computer. Hold it and speak: the audio streams to a server on your LAN, gets transcribed and is typed into the active window. Short presses run whatever you bind to them, such as Enter or Tab.
 
@@ -12,7 +12,9 @@ The button is an ESP32-S3 on a small LiPo. It sleeps between presses, wakes on t
 
 ![The parts before stacking: the XIAO board with its antenna, the microphone, the button board and the battery](docs/images/0.jpg)
 
-![The prototype in a hand, wrapped in white tape with its button showing](docs/images/3.jpg)
+| | |
+|---|---|
+| ![The printed case in a hand, with the button and the microphone slit on its front](docs/images/7.jpg) | ![The case in a hand in front of this repository, with the pixel glowing through the slit](docs/images/8.jpg) |
 
 ## How it works
 

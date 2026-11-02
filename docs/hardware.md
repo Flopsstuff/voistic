@@ -2,11 +2,7 @@
 
 The button with a microphone, board `voistic-9af4`. It sleeps, wakes on a press and, while held, records the voice and streams it to a server on the LAN. Build the firmware with `pio run -e mic`.
 
-![The stacked boards next to the battery and antenna](images/2.jpg)
-
-![The button side of the stack on USB, with the microphone board at the end](images/1.jpg)
-
-![The finished prototype, wrapped in tape](images/3.jpg)
+This page follows the build from loose parts to the printed case. There's also [a short video](images/vid.mp4) of it at work.
 
 ## Parts
 
@@ -16,6 +12,10 @@ The button with a microphone, board `voistic-9af4`. It sleeps, wakes on a press 
 | Adafruit IoT Button with NeoPixel BFF | button and colour pixel, sits on the XIAO |
 | SPH0645, a digital MEMS microphone with I²S | voice |
 | LiPo, 600 mAh | power |
+
+Here they are before assembly, with the XIAO's antenna on the right.
+
+![The parts laid out on a cutting mat: the XIAO with its antenna, the microphone, the button board and the battery](images/0.jpg)
 
 PlatformIO has no board definition for the Plus, so the project uses `seeed_xiao_esp32s3` with the flash size overridden.
 
@@ -36,6 +36,44 @@ The power wires cross: the XIAO has GND above 3V3, while the microphone has 3V a
 The IoT Button BFF mounts directly on the XIAO, back to back, with no separate wires. The button comes out on A2 (GPIO3) and the pixel on A3 (GPIO4).
 
 The battery connects to the BAT+ and BAT− pads on the back of the XIAO.
+
+The microphone board ends up sticking out past the USB connector, between the XIAO and the BFF.
+
+![The button side of the stack on USB, with the microphone board at the end](images/1.jpg)
+
+## Assembly
+
+The boards go together into one stack, which lies next to the battery and antenna.
+
+![The stacked boards next to the battery and antenna](images/2.jpg)
+
+The first prototype held together with tape. The battery sits behind the stack, the antenna folds around it on the XIAO's side, and the USB connector stays free for charging.
+
+![The XIAO side of the taped prototype, with the antenna wrapped around the battery](images/5.jpg)
+
+On the other side are the button and the pixel, with the battery wires tucked in beside them.
+
+![The button side of the taped prototype, with the battery wires and the microphone board](images/6.jpg)
+
+Wrapped in white tape, with only the button showing, it was already usable day to day.
+
+![The prototype in a hand, wrapped in white tape with its button showing](images/3.jpg)
+
+## Case
+
+The case started as a render, a small stick with one button.
+
+![A concept render of the voice stick next to a laptop](images/hero.jpg)
+
+It's now two printed parts, modelled as Onshape custom features, with the sources and the STLs in [`cad/`](../cad). The stack goes into a tube from the top, near the back wall. A plate on the cap then pushes it forward as the cap goes on, until the button comes out through its hole. The cap has a skirt all around, and bumps on its sides snap into dimples in the tube.
+
+The first print, 28 × 20 mm with a 1.8 mm wall, held everything with room to spare, and its cap wouldn't stay on. The current one is 22 × 18 × 80 mm with a 1 mm wall. The tube prints standing and the cap roof down, both with no supports. On a 0.4 mm nozzle the wall takes two perimeters with a variable line width, such as Arachne.
+
+![The printed case in a hand, with the button and the microphone slit on its front](images/7.jpg)
+
+The pixel has no window of its own. It shines through the microphone slit, and the USB plug goes in through a window in the cap.
+
+![The case in a hand in front of this repository, with the pixel glowing through the slit](images/8.jpg)
 
 ## Microphone
 
