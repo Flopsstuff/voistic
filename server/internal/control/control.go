@@ -14,6 +14,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 
@@ -72,9 +73,13 @@ func (s *Server) Serve(ctx context.Context, path string) error {
 	if err != nil {
 		return err
 	}
-	if err := os.Chmod(path, 0o600); err != nil {
-		listener.Close()
-		return err
+	// Windows has no modes for a socket. The state folder in the user's profile
+	// is what keeps it private there.
+	if runtime.GOOS != "windows" {
+		if err := os.Chmod(path, 0o600); err != nil {
+			listener.Close()
+			return err
+		}
 	}
 
 	mux := http.NewServeMux()

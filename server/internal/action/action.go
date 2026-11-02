@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"voistic/server/internal/config"
+	"voistic/server/internal/paste"
 )
 
 const (
@@ -42,8 +43,11 @@ func Run(ctx context.Context, a config.Action, event Event) (string, error) {
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
-	if a.HTTP != nil {
+	switch {
+	case a.HTTP != nil:
 		return runHTTP(ctx, *a.HTTP)
+	case a.Key != "":
+		return "", paste.Key(ctx, a.Key)
 	}
 	return runExec(ctx, a.Exec, event)
 }

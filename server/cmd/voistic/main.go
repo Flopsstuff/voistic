@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"net"
 	"net/http"
@@ -31,7 +32,7 @@ import (
 
 const usage = `usage: voistic <command>
 
-  serve                    run the server
+  serve [--log <file>]     run the server, logging to stderr or a file
   pair                     accept one button not in the config, for two minutes
   forget <device>          drop a button's key, so it can pair again
   devices                  list paired buttons
@@ -39,8 +40,9 @@ const usage = `usage: voistic <command>
   check                    validate the config
   transcribe <file>        turn a recording into text next to it
   firmware <device> <file> <version>  offer a firmware to a button, it asks on 5 presses
-  install                  run the server at login, as a launchd agent on macOS
-  uninstall                remove the launchd agent
+  install                  run the server at login, on macOS and Windows
+  uninstall                stop running it at login
+  version                  print the version
 
 A button named under devices in the config pairs by itself.
 
@@ -52,6 +54,9 @@ Environment:
 `
 
 const transcribeTimeout = 2 * time.Minute
+
+// version is set at build time.
+var version = "dev"
 
 func main() {
 	if err := run(os.Args[1:]); err != nil {
@@ -73,7 +78,17 @@ func run(args []string) error {
 	client := control.NewClient(paths.socket)
 	switch command := args[0]; {
 	case command == "serve" && len(args) == 1:
-		return serve(paths)
+		return serve(paths, os.Stderr)
+	case command == "serve" && len(args) == 3 && args[1] == "--log":
+		log, err := os.OpenFile(args[2], os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
+		if err != nil {
+			return err
+		}
+		defer log.Close()
+		return serve(paths, log)
+	case command == "version" && len(args) == 1:
+		fmt.Println(version)
+		return nil
 	case command == "check" && len(args) == 1:
 		return check(paths)
 	case command == "firmware" && len(args) == 4:
@@ -131,8 +146,8 @@ func defaultPaths() (paths, error) {
 	return p, nil
 }
 
-func serve(p paths) error {
-	log := slog.New(slog.NewTextHandler(os.Stderr, nil))
+func serve(p paths, output io.Writer) error {
+	log := slog.New(slog.NewTextHandler(output, nil))
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
@@ -275,6 +290,9 @@ func install(p paths) error {
 		return err
 	}
 	if executable, err = filepath.EvalSymlinks(executable); err != nil {
+		return err
+	}
+	if err := os.MkdirAll(p.state, 0o700); err != nil {
 		return err
 	}
 	log := filepath.Join(p.state, "serve.log")

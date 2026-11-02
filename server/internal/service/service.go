@@ -1,21 +1,18 @@
-// Package service runs the server as a launchd agent, so it starts with the
-// login and comes back after a crash. An agent rather than a daemon, because
-// pressing keys only works inside the user's session.
+// Package service runs the server at login, so it comes back after a crash: as a
+// launchd agent on macOS and a scheduled task on Windows. Both live in the user's
+// session rather than the system's, because pressing keys only works there.
 package service
 
 import (
 	"bytes"
 	"encoding/xml"
-	"errors"
 	"fmt"
-	"os"
-	"os/exec"
-	"path/filepath"
-	"runtime"
+	"strings"
+	"unicode/utf16"
 )
 
-// Label names the agent to launchd. It's also the identifier the binary is
-// signed with.
+// Label names the agent to launchd and the task to Windows. It's also the
+// identifier the binary is signed with.
 const Label = "app.voistic.server"
 
 const defaultPath = "/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
@@ -61,60 +58,56 @@ func Plist(executable, log string) ([]byte, error) {
 	return out.Bytes(), nil
 }
 
-// Install writes the agent and starts it, replacing an earlier one.
-func Install(executable, log string) error {
-	if runtime.GOOS != "darwin" {
-		return errors.New("install only works on macOS for now")
+// Task returns a Task Scheduler definition that runs the server at the user's
+// login and restarts it after a crash. schtasks reads it as UTF-16.
+func Task(executable, log, user string) []byte {
+	escape := func(s string) string {
+		var escaped bytes.Buffer
+		xml.EscapeText(&escaped, []byte(s))
+		return escaped.String()
 	}
-	path, err := plistPath()
-	if err != nil {
-		return err
-	}
-	definition, err := Plist(executable, log)
-	if err != nil {
-		return err
-	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return err
-	}
-	if err := os.WriteFile(path, definition, 0o644); err != nil {
-		return err
-	}
-	exec.Command("launchctl", "bootout", target()).Run() // fine if it wasn't loaded
-	return launchctl("bootstrap", domain(), path)
-}
+	arguments := fmt.Sprintf(`serve --log "%s"`, log)
+	definition := fmt.Sprintf(`<?xml version="1.0" encoding="UTF-16"?>
+<Task version="1.2" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
+  <RegistrationInfo>
+    <Description>voistic server</Description>
+  </RegistrationInfo>
+  <Triggers>
+    <LogonTrigger>
+      <Enabled>true</Enabled>
+      <UserId>%[1]s</UserId>
+    </LogonTrigger>
+  </Triggers>
+  <Principals>
+    <Principal id="Author">
+      <UserId>%[1]s</UserId>
+      <LogonType>InteractiveToken</LogonType>
+      <RunLevel>LeastPrivilege</RunLevel>
+    </Principal>
+  </Principals>
+  <Settings>
+    <MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy>
+    <DisallowStartIfOnBatteries>false</DisallowStartIfOnBatteries>
+    <StopIfGoingOnBatteries>false</StopIfGoingOnBatteries>
+    <ExecutionTimeLimit>PT0S</ExecutionTimeLimit>
+    <RestartOnFailure>
+      <Interval>PT1M</Interval>
+      <Count>999</Count>
+    </RestartOnFailure>
+  </Settings>
+  <Actions Context="Author">
+    <Exec>
+      <Command>%[2]s</Command>
+      <Arguments>%[3]s</Arguments>
+    </Exec>
+  </Actions>
+</Task>
+`, escape(user), escape(executable), escape(arguments))
 
-// Uninstall stops the agent and removes it.
-func Uninstall() error {
-	if runtime.GOOS != "darwin" {
-		return errors.New("uninstall only works on macOS for now")
+	units := utf16.Encode([]rune(strings.ReplaceAll(definition, "\n", "\r\n")))
+	out := []byte{0xFF, 0xFE} // the byte order mark
+	for _, unit := range units {
+		out = append(out, byte(unit), byte(unit>>8))
 	}
-	path, err := plistPath()
-	if err != nil {
-		return err
-	}
-	exec.Command("launchctl", "bootout", target()).Run() // fine if it wasn't loaded
-	if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
-		return err
-	}
-	return nil
-}
-
-func plistPath() (string, error) {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return "", err
-	}
-	return filepath.Join(home, "Library", "LaunchAgents", Label+".plist"), nil
-}
-
-func domain() string { return fmt.Sprintf("gui/%d", os.Getuid()) }
-func target() string { return domain() + "/" + Label }
-
-func launchctl(args ...string) error {
-	output, err := exec.Command("launchctl", args...).CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("launchctl %s: %w: %s", args[0], err, bytes.TrimSpace(output))
-	}
-	return nil
+	return out
 }

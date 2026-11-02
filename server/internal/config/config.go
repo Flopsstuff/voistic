@@ -14,6 +14,8 @@ import (
 	"time"
 
 	"gopkg.in/yaml.v3"
+
+	"voistic/server/internal/paste"
 )
 
 // DefaultListen is the address used when the config doesn't set one.
@@ -51,10 +53,11 @@ type Device struct {
 	Gestures map[string]Action `yaml:"gestures"`
 }
 
-// Action is what a gesture does. Exactly one of Exec and HTTP is set.
+// Action is what a gesture does. Exactly one of Exec, HTTP and Key is set.
 type Action struct {
 	Exec    []string      `yaml:"exec"`
 	HTTP    *HTTP         `yaml:"http"`
+	Key     string        `yaml:"key"` // a key to press, on macOS and Windows
 	Timeout time.Duration `yaml:"timeout"`
 }
 
@@ -115,8 +118,17 @@ func (c *Config) validate() error {
 }
 
 func (a Action) validate() error {
-	if (len(a.Exec) > 0) == (a.HTTP != nil) {
-		return errors.New("set exactly one of exec and http")
+	kinds := 0
+	for _, set := range []bool{len(a.Exec) > 0, a.HTTP != nil, a.Key != ""} {
+		if set {
+			kinds++
+		}
+	}
+	if kinds != 1 {
+		return errors.New("set exactly one of exec, http and key")
+	}
+	if a.Key != "" && !paste.IsKey(a.Key) {
+		return fmt.Errorf("unknown key %q, use one of %v", a.Key, paste.Keys)
 	}
 	if a.Timeout < 0 {
 		return errors.New("timeout can't be negative")

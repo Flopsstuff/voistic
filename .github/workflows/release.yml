@@ -1,0 +1,50 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    uses: ./.github/workflows/ci.yml
+
+  release:
+    needs: checks
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0 # scripts/version.py reads the tags
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: server/go.mod
+          cache-dependency-path: server/go.sum
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+      - uses: actions/cache@v6
+        with:
+          path: ~/.platformio
+          key: platformio-${{ hashFiles('platformio.ini') }}
+      - run: pip install platformio
+
+      - name: Build the server
+        run: make -C server dist VERSION="$GITHUB_REF_NAME"
+      - name: Build the firmware
+        run: |
+          pio run -e usb -e mic
+          cp .pio/build/usb/firmware.bin server/dist/firmware-usb.bin
+          cp .pio/build/mic/firmware.bin server/dist/firmware-mic.bin
+      - name: Sum the files
+        working-directory: server/dist
+        run: sha256sum -- * > SHA256SUMS
+
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" server/dist/* --verify-tag --generate-notes

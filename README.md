@@ -6,7 +6,7 @@
 
 A physical Wi-Fi button that talks to your computer. Hold it and speak: the audio streams to a server on your LAN, gets transcribed and is typed into the active window. Short presses run whatever you bind to them, such as Enter or Tab.
 
-The button is an ESP32-S3 on a small LiPo. It sleeps between presses, wakes on the button, does its job and goes back to sleep. The server is a single Go binary for macOS and Linux.
+The button is an ESP32-S3 on a small LiPo. It sleeps between presses, wakes on the button, does its job and goes back to sleep. The server is a single Go binary for macOS, Windows and Linux.
 
 [Watch a short video](docs/images/vid.mp4) of the button typing a message by voice.
 
@@ -46,11 +46,11 @@ The blink is at full brightness while the button is down and at half when it's u
 
 ## Setup
 
-You need [PlatformIO](https://platformio.org), Go and a [Groq API key](https://console.groq.com). The hardware is described in [docs/hardware.md](docs/hardware.md).
+You need a [Groq API key](https://console.groq.com). [Releases](https://github.com/Flopsstuff/voistic/releases/latest) have the server for each system and the firmware. To build them yourself you need Go and [PlatformIO](https://platformio.org). The hardware is described in [docs/hardware.md](docs/hardware.md).
 
 ### Server
 
-On macOS, create the signing certificate first. macOS ties firewall and Accessibility approval to the signature, so a stable one keeps them across rebuilds:
+Download the archive for your system, or build it. On macOS, create the signing certificate first. macOS ties firewall and Accessibility approval to the signature, so a stable one keeps them across rebuilds:
 
 ```bash
 cd server
@@ -64,7 +64,7 @@ Write the config at `~/.config/voistic/config.yaml`:
 listen: ":8787"
 recordings: /path/to/recordings   # folder for WAV and text files
 save_recordings: true             # false deletes them once they've been used
-paste: true                       # type the text into the active window, macOS only
+paste: true                       # type the text into the active window, macOS and Windows
 groq:
   api_key: your-groq-key
   language: en                    # leave out to let the API guess
@@ -76,14 +76,14 @@ devices:
     name: Button with a microphone
     gestures:
       single:
-        exec: ["osascript", "-e", 'tell application "System Events" to key code 36']  # Return
+        key: enter
       double:
-        exec: ["osascript", "-e", 'tell application "System Events" to key code 48']  # Tab
+        key: tab
       triple:
-        exec: ["osascript", "-e", 'tell application "System Events" to key code 53']  # Esc
+        key: esc
 ```
 
-The file holds your API key, so keep it private with `chmod 600`. Edits apply on the next press. An action is either `exec` or `http`, with `url`, `method`, `headers` and `json` or `body`.
+The file holds your API key, so keep it private with `chmod 600`. Edits apply on the next press. An action is one of `key`, which presses `enter`, `tab` or `esc` on macOS and Windows, `exec`, and `http`, with `url`, `method`, `headers` and `json` or `body`.
 
 Then run the server at login, as a launchd agent on macOS:
 
@@ -92,6 +92,18 @@ bin/voistic install
 ```
 
 Pasting and key presses need Accessibility permission. In System Settings, under Privacy & Security, Accessibility, add `server/bin/voistic`.
+
+### Windows
+
+Unpack the archive somewhere it can stay and put the config at `%USERPROFILE%\.config\voistic\config.yaml`. Then run the server at login, as a scheduled task:
+
+```powershell
+.\voistic.exe install
+```
+
+The task runs `voisticw.exe`, the same program with no console window, so keep the two files together. Windows SmartScreen warns about the unsigned files, and the firewall asks to allow the server on first start. The log is at `%USERPROFILE%\.local\state\voistic\serve.log`.
+
+A window running as administrator can't be pasted into, since Windows blocks input to it from an ordinary program.
 
 ### Button
 
@@ -124,8 +136,8 @@ A button named under `devices` pairs by itself on its first press. For any other
 ## Server commands
 
 ```
-voistic serve                    run the server
-voistic install | uninstall      add or remove the launchd agent
+voistic serve [--log <file>]     run the server
+voistic install | uninstall      run the server at login, or stop that, on macOS and Windows
 voistic check                    validate the config
 voistic devices                  list paired buttons
 voistic pair                     accept one button not in the config
@@ -133,6 +145,7 @@ voistic forget <device>          drop a button's key
 voistic test <device> <gesture>  run an action without the button
 voistic transcribe <file>        turn a recording into text next to it
 voistic firmware <device> <file> <version>  offer a firmware to a button
+voistic version                  print the version
 ```
 
 `make restart` rebuilds the server and restarts the agent. The log is at `~/.local/state/voistic/serve.log`.
@@ -147,6 +160,8 @@ tools/publish-firmware.sh mic voistic-9af4
 
 This builds it and puts it on the server. Then press the button 5 times: it downloads the firmware, checks its hash and restarts. A new firmware has to reach the server on its first boot, or the bootloader goes back to the previous one.
 
+A firmware from a release goes the same way, once you've run `voistic firmware voistic-9af4 firmware-mic.bin v0.1.0`, with the release's tag as the version.
+
 ## Security
 
 Requests are signed with HMAC-SHA256 under a per-device key, and a growing counter stops replays. There's no TLS, so the voice crosses your LAN unencrypted, and only the start of a recording is signed, not the audio. Audio goes to Groq for transcription.
@@ -160,7 +175,7 @@ pio test -e native    # gesture tests, on this computer
 cd server && make test
 ```
 
-See [AGENTS.md](AGENTS.md) for the architecture.
+See [AGENTS.md](AGENTS.md) for the architecture. A push runs the tests on all three systems and builds the firmware. A tag like `v0.1.0` also publishes a release with every archive and firmware.
 
 ## License
 

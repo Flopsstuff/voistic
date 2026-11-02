@@ -55,6 +55,8 @@ func TestLoadRejects(t *testing.T) {
 	tests := map[string]struct{ yaml, want string }{
 		"unknown gesture": {device + "      quad: {exec: [x]}\n", "unknown gesture"},
 		"both kinds":      {device + "      single: {exec: [x], http: {url: http://a}}\n", "exactly one"},
+		"key and exec":    {device + "      single: {exec: [x], key: tab}\n", "exactly one"},
+		"unknown key":     {device + "      single: {key: f13}\n", "unknown key"},
 		"neither kind":    {device + "      single: {timeout: 1s}\n", "exactly one"},
 		"http no url":     {device + "      single: {http: {method: GET}}\n", "needs a url"},
 		"json and body":   {device + "      single: {http: {url: http://a, json: {}, body: x}}\n", "only one"},

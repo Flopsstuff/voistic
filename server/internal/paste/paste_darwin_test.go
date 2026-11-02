@@ -3,16 +3,12 @@ package paste
 import (
 	"context"
 	"errors"
-	"runtime"
 	"strings"
 	"testing"
 )
 
 func record(t *testing.T, fail string) *[]string {
 	t.Helper()
-	if runtime.GOOS != "darwin" {
-		t.Skip("macOS only")
-	}
 	var calls []string
 	original := run
 	t.Cleanup(func() { run = original })
@@ -56,5 +52,23 @@ func TestEmptyTextDoesNothing(t *testing.T) {
 	}
 	if len(*calls) != 0 {
 		t.Errorf("calls %q", *calls)
+	}
+}
+
+func TestKeyPressesItsCode(t *testing.T) {
+	calls := record(t, "")
+	if err := Key(context.Background(), "tab"); err != nil {
+		t.Fatal(err)
+	}
+	if len(*calls) != 1 || !strings.Contains((*calls)[0], "key code 48") {
+		t.Fatalf("calls %q", *calls)
+	}
+}
+
+func TestEveryKeyHasACode(t *testing.T) {
+	for _, key := range Keys {
+		if _, ok := keyCodes[key]; !ok {
+			t.Errorf("no code for %s", key)
+		}
 	}
 }
