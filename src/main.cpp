@@ -32,6 +32,7 @@ constexpr uint32_t kAwakeLimitMs = 15000;
 constexpr uint32_t kIdleAfterResetMs = 10000;  // room for a USB reflash or a hold
 constexpr uint32_t kJoinTimeoutMs = 15000;
 constexpr uint32_t kPairTimeoutMs = 120000;
+constexpr uint32_t kPairCancelHoldMs = 2000;
 constexpr uint32_t kPortalTimeoutMs = 300000;
 constexpr uint32_t kMaxRecordingMs = 180000;
 constexpr size_t kMaxEdges = 32;
@@ -156,6 +157,27 @@ bool joinSavedNetwork() {
   return false;
 }
 
+// A 2 s press gives up on pairing. It's read from the edges, because a network
+// query blocks for seconds, so a press in the middle of one still counts.
+bool pairingCancelled() {
+  static bool down = false;
+  static uint32_t downAtMs = 0;
+  while (edgeTail != edgeHead) {
+    const Edge edge = edges[edgeTail];
+    edgeTail = (edgeTail + 1) % kMaxEdges;
+    if (edge.down && !down) {
+      down = true;
+      downAtMs = edge.ms;
+    } else if (!edge.down && down) {
+      down = false;
+      if (edge.ms - downAtMs >= kPairCancelHoldMs) {
+        return true;
+      }
+    }
+  }
+  return down && millis() - downAtMs >= kPairCancelHoldMs;
+}
+
 [[noreturn]] void runPairing() {
   Serial.printf("pairing as %s\n", clientDeviceId().c_str());
   ledsSet(Led::Pairing);
@@ -168,7 +190,8 @@ bool joinSavedNetwork() {
     ledsSet(Led::Pairing);
   }
   clientRelease();  // the server won't hand a new key to a button that has one
-  finish(clientPair(kPairTimeoutMs) ? Led::Paired : Led::Failed);
+  edgeTail = edgeHead;  // the press that got here doesn't count
+  finish(clientPair(kPairTimeoutMs, pairingCancelled) ? Led::Paired : Led::Failed);
 }
 
 [[noreturn]] void runUpdate() {

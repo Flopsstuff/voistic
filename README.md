@@ -28,7 +28,7 @@ The button is an ESP32-S3 on a small LiPo. It sleeps between presses, wakes on t
 | `single`, `double`, `triple` | 1, 2 or 3 presses, up to 350 ms apart | Enter, Tab, Esc |
 | `long` | hold from 0.4 s, for as long as you speak | record and transcribe |
 | Update | 5 short presses | fetch a new firmware from the server, if there is one |
-| Pairing | 5 short presses, then hold the sixth for 5 s | |
+| Pairing | 5 short presses, then hold the sixth for 5 s | a 2 s press cancels it |
 | Full reset | 5 short presses, then hold the sixth for 15 s | forgets Wi-Fi and the server |
 
 The pixel shows what the board understood:

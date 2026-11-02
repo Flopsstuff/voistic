@@ -10,6 +10,7 @@
 #include <esp_mac.h>
 #include <mbedtls/md.h>
 #include <mbedtls/sha256.h>
+#include <mdns.h>
 
 namespace {
 
@@ -30,6 +31,10 @@ constexpr uint32_t kDownloadStallMs = 10000;
 constexpr size_t kDownloadChunk = 4096;
 constexpr size_t kHashBytes = 32;
 constexpr size_t kAudioChunkPrefix = 8;  // "ffff\r\n"
+constexpr uint32_t kQueryTimeoutMs = 3000;
+constexpr size_t kMaxServers = 8;
+constexpr uint32_t kPairRetryMs = 1000;
+constexpr uint32_t kPairPollMs = 50;
 
 // The address is cached, because an mDNS query takes seconds.
 struct ServerAddress {
@@ -84,24 +89,50 @@ String sign(const uint8_t* key, const String& message) {
   return toHex(mac, sizeof(mac));
 }
 
+ServerAddress foundServers[kMaxServers];
+
+// A server lists every address it has, a virtual adapter's among them, and only
+// one on this button's subnet can be reached.
+bool isOnOurSubnet(uint32_t address) {
+  const uint32_t mask = WiFi.subnetMask();
+  return (address & mask) == (static_cast<uint32_t>(WiFi.localIP()) & mask);
+}
+
 // Asks mDNS who's there. Several servers can share a network and only one of
-// them is this button's, so a caller may have to try each.
+// them is this button's, so a caller may have to try each. This goes to ESP-IDF
+// because MDNS.IP() only gives the first address of each server.
 int findServers() {
   static bool started = false;
   if (!started) {
     started = MDNS.begin(clientDeviceId().c_str());
   }
-  const int count = MDNS.queryService("voistic", "tcp");
+  mdns_result_t* results = nullptr;
+  if (mdns_query_ptr("_voistic", "_tcp", kQueryTimeoutMs, kMaxServers, &results) != ESP_OK) {
+    return 0;
+  }
+  int count = 0;
+  for (const mdns_result_t* result = results; result != nullptr && count < kMaxServers;
+       result = result->next) {
+    for (const mdns_ip_addr_t* address = result->addr; address != nullptr; address = address->next) {
+      if (address->addr.type != ESP_IPADDR_TYPE_V4) {
+        continue;
+      }
+      const IPAddress ip(address->addr.u_addr.ip4.addr);
+      Serial.printf("mdns: %s:%u\n", ip.toString().c_str(), result->port);
+      if (isOnOurSubnet(address->addr.u_addr.ip4.addr)) {
+        foundServers[count].host = ip.toString();
+        foundServers[count].port = result->port;
+        ++count;
+        break;
+      }
+    }
+  }
+  mdns_query_results_free(results);
   Serial.printf("mdns: %d servers\n", count);
   return count;
 }
 
-ServerAddress foundServer(int index) {
-  ServerAddress server;
-  server.host = MDNS.IP(index).toString();
-  server.port = MDNS.port(index);
-  return server;
-}
+ServerAddress foundServer(int index) { return foundServers[index]; }
 
 // Takes the skip-th server found, wrapping around, so that retries go on to the
 // next one.
@@ -466,19 +497,18 @@ SendResult clientAudioEnd() {
   return result;
 }
 
-bool clientPair(uint32_t timeoutMs) {
+bool clientPair(uint32_t timeoutMs, bool (*cancelled)()) {
   openPrefs();
   const String body = "{\"device\":\"" + clientDeviceId() + "\",\"fw\":\"" FW_VERSION "\"}";
 
   const uint32_t start = millis();
   while (millis() - start < timeoutMs) {
     const int count = findServers();
-    if (count <= 0) {
-      delay(500);
-      continue;
-    }
     // Only the server with `voistic pair` running says yes.
     for (int index = 0; index < count; ++index) {
+      if (cancelled()) {
+        return false;
+      }
       const ServerAddress server = foundServer(index);
       String response;
       String unused;
@@ -502,7 +532,12 @@ bool clientPair(uint32_t timeoutMs) {
       saveServer(server);
       return true;
     }
-    delay(1000);
+    for (uint32_t waited = 0; waited < kPairRetryMs; waited += kPairPollMs) {
+      if (cancelled()) {
+        return false;
+      }
+      delay(kPairPollMs);
+    }
   }
   return false;
 }

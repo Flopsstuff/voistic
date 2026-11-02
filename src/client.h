@@ -55,7 +55,7 @@ SendResult clientAudioEnd();
 
 // Looks for a server that accepts this button and takes a key from it. Blocks
 // for up to timeoutMs.
-bool clientPair(uint32_t timeoutMs);
+bool clientPair(uint32_t timeoutMs, bool (*cancelled)());
 
 // Gives up the key before pairing again. The key stays if the server can't be
 // reached, so a failed attempt doesn't cost a working button.
