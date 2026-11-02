@@ -65,6 +65,7 @@ listen: ":8787"
 recordings: /path/to/recordings   # folder for WAV and text files
 save_recordings: true             # false deletes them once they've been used
 paste: true                       # type the text into the active window, macOS and Windows
+paste_suffix: " "                 # added after the pasted text, so the next phrase doesn't stick to it
 groq:
   api_key: your-groq-key
   language: en                    # leave out to let the API guess

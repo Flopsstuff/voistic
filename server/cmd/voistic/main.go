@@ -257,7 +257,7 @@ func transcriber(ctx context.Context, loader *config.Loader, log *slog.Logger) f
 			}
 			log.Info("transcribed", "path", out, "took", time.Since(start).Round(time.Millisecond), "chars", len([]rune(text)))
 			if cfg.Paste {
-				if err := paste.Text(ctx, text); err != nil {
+				if err := paste.Text(ctx, text+cfg.PasteSuffix); err != nil {
 					log.Error("paste failed, the text is in the file", "path", out, "err", err)
 					return
 				}

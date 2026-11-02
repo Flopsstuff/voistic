@@ -30,10 +30,12 @@ type Config struct {
 	Recordings string `yaml:"recordings"` // folder for voice recordings
 	// SaveRecordings, off, drops the audio and the text once they've been used.
 	// Unset means on.
-	SaveRecordings *bool             `yaml:"save_recordings"`
-	Paste          bool              `yaml:"paste"` // type transcripts into the active window
-	Groq           Groq              `yaml:"groq"`
-	Devices        map[string]Device `yaml:"devices"`
+	SaveRecordings *bool `yaml:"save_recordings"`
+	Paste          bool  `yaml:"paste"` // type transcripts into the active window
+	// PasteSuffix goes after each pasted transcript, such as a space.
+	PasteSuffix string            `yaml:"paste_suffix"`
+	Groq        Groq              `yaml:"groq"`
+	Devices     map[string]Device `yaml:"devices"`
 }
 
 // Groq sets up speech recognition through the Groq API.
