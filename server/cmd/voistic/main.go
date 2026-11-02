@@ -33,7 +33,7 @@ import (
 const usage = `usage: voistic <command>
 
   serve [--log <file>]     run the server, logging to stderr or a file
-  pair                     accept one button not in the config, for two minutes
+  pair                     accept one button, for two minutes
   forget <device>          drop a button's key, so it can pair again
   devices                  list paired buttons
   test <device> <gesture>  run an action without pressing the button
@@ -44,7 +44,7 @@ const usage = `usage: voistic <command>
   uninstall                stop running it at login
   version                  print the version
 
-A button named under devices in the config pairs by itself.
+A button only pairs while voistic pair is waiting.
 
 Gestures: single, double, triple, long.
 

@@ -84,18 +84,33 @@ String sign(const uint8_t* key, const String& message) {
   return toHex(mac, sizeof(mac));
 }
 
-bool discover(ServerAddress& server) {
+// Asks mDNS who's there. Several servers can share a network and only one of
+// them is this button's, so a caller may have to try each.
+int findServers() {
   static bool started = false;
   if (!started) {
     started = MDNS.begin(clientDeviceId().c_str());
   }
   const int count = MDNS.queryService("voistic", "tcp");
   Serial.printf("mdns: %d servers\n", count);
+  return count;
+}
+
+ServerAddress foundServer(int index) {
+  ServerAddress server;
+  server.host = MDNS.IP(index).toString();
+  server.port = MDNS.port(index);
+  return server;
+}
+
+// Takes the skip-th server found, wrapping around, so that retries go on to the
+// next one.
+bool discover(ServerAddress& server, int skip = 0) {
+  const int count = findServers();
   if (count <= 0) {
     return false;
   }
-  server.host = MDNS.IP(0).toString();
-  server.port = MDNS.port(0);
+  server = foundServer(skip % count);
   return true;
 }
 
@@ -245,8 +260,10 @@ SendResult clientSendPress(const char* gesture) {
   server.port = prefs.getUShort(kPortKey);
 
   // Retries reuse the seq, so the server runs the action at most once.
+  bool refused = false;
+  int found = 0;
   for (int attempt = 0; attempt < kSendAttempts; ++attempt) {
-    if (server.host.isEmpty() && !discover(server)) {
+    if (server.host.isEmpty() && !discover(server, found++)) {
       continue;
     }
     String response;
@@ -261,11 +278,11 @@ SendResult clientSendPress(const char* gesture) {
         return result;
       }
     } else if (code == HTTP_CODE_UNAUTHORIZED) {
-      return SendResult::NotPaired;
+      refused = true;  // maybe another computer's server, so this isn't final yet
     }
     server.host = "";  // it may have moved, ask mDNS next time
   }
-  return SendResult::NoServer;
+  return refused ? SendResult::NotPaired : SendResult::NoServer;
 }
 
 UpdateCheck clientCheckUpdate(UpdateOffer& offer) {
@@ -455,34 +472,37 @@ bool clientPair(uint32_t timeoutMs) {
 
   const uint32_t start = millis();
   while (millis() - start < timeoutMs) {
-    ServerAddress server;
-    if (!discover(server)) {
+    const int count = findServers();
+    if (count <= 0) {
       delay(500);
       continue;
     }
+    // Only the server with `voistic pair` running says yes.
+    for (int index = 0; index < count; ++index) {
+      const ServerAddress server = foundServer(index);
+      String response;
+      String unused;
+      const int code = post(server, "/v1/pair", body, "", response, unused);
+      Serial.printf("pair: %s:%u, http %d\n", server.host.c_str(), server.port, code);
+      if (code != HTTP_CODE_OK) {
+        continue;
+      }
 
-    String response;
-    String unused;
-    const int code = post(server, "/v1/pair", body, "", response, unused);
-    Serial.printf("pair: %s:%u, http %d\n", server.host.c_str(), server.port, code);
-    if (code != HTTP_CODE_OK) {
-      delay(1000);
-      continue;
+      const int keyAt = response.indexOf("\"key\":\"");
+      if (keyAt < 0) {
+        continue;
+      }
+      const String hex = response.substring(keyAt + 7, keyAt + 7 + kKeyBytes * 2);
+      uint8_t key[kKeyBytes];
+      if (!fromHex(hex, key, kKeyBytes)) {
+        continue;
+      }
+      prefs.putString(kKeyKey, hex);
+      prefs.putULong64(kSeqKey, 0);
+      saveServer(server);
+      return true;
     }
-
-    const int keyAt = response.indexOf("\"key\":\"");
-    if (keyAt < 0) {
-      continue;
-    }
-    const String hex = response.substring(keyAt + 7, keyAt + 7 + kKeyBytes * 2);
-    uint8_t key[kKeyBytes];
-    if (!fromHex(hex, key, kKeyBytes)) {
-      continue;
-    }
-    prefs.putString(kKeyKey, hex);
-    prefs.putULong64(kSeqKey, 0);
-    saveServer(server);
-    return true;
+    delay(1000);
   }
   return false;
 }

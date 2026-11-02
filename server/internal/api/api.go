@@ -208,7 +208,9 @@ func (s *Server) pair(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "bad device id", http.StatusBadRequest)
 		return
 	}
-	if !s.mayPair(req.Device) {
+	// Only a `voistic pair` window lets a device in, so pairing is always asked for
+	// on this computer. With several servers on a network, the others refuse.
+	if !s.Pairing.Claim(req.Device) {
 		s.Log.Warn("refused pairing", "device", req.Device)
 		http.Error(w, "pairing is closed", http.StatusForbidden)
 		return
@@ -228,25 +230,6 @@ func (s *Server) pair(w http.ResponseWriter, r *http.Request) {
 	}
 	s.Log.Info("paired", "device", req.Device)
 	writeJSON(w, pairResponse{Key: key})
-}
-
-// mayPair lets in the one device of an open `voistic pair` window, or any device
-// the config names that has no key yet: naming it there is the approval. A
-// device with a key can't be taken over this way; it has to give up the key
-// through unpair first, or be forgotten with `voistic forget`.
-func (s *Server) mayPair(id string) bool {
-	if s.Pairing.Claim(id) {
-		return true
-	}
-	if _, paired := s.Store.Device(id); paired {
-		return false
-	}
-	cfg, err := s.Config()
-	if err != nil {
-		return false
-	}
-	_, named := cfg.Devices[id]
-	return named
 }
 
 // unpair lets a button give up its key before a factory reset, so it can pair

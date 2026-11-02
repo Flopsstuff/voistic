@@ -3,6 +3,7 @@ package store
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 )
 
@@ -20,7 +21,8 @@ func TestPutPersistsPrivately(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if mode := info.Mode().Perm(); mode != 0o600 {
+	// Windows has no modes, the user's profile keeps the file private there.
+	if mode := info.Mode().Perm(); runtime.GOOS != "windows" && mode != 0o600 {
 		t.Errorf("mode = %o, want 600", mode)
 	}
 
@@ -44,6 +46,9 @@ func TestPutKeepsMemoryOnWriteFailure(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	if runtime.GOOS == "windows" {
+		t.Skip("a read-only folder still takes writes on Windows")
+	}
 	if err := os.Chmod(dir, 0o500); err != nil {
 		t.Fatal(err)
 	}

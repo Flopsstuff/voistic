@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -142,6 +143,9 @@ func TestPair(t *testing.T) {
 }
 
 func TestSocketIsPrivate(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows has no modes, the user's profile keeps the socket private")
+	}
 	_, _, path := start(t)
 	info, err := os.Stat(path)
 	if err != nil {

@@ -320,18 +320,21 @@ func unpairBody(t *testing.T, device string, seq int) (string, string) {
 	return string(data), signature
 }
 
-func TestConfiguredDevicePairsItself(t *testing.T) {
+func TestConfiguredDeviceStillNeedsTheWindow(t *testing.T) {
 	h := newHarness(t)
 	body, signature := unpairBody(t, testDevice, 1)
 	if resp, _ := h.post(t, "/v1/unpair", body, signature); resp.StatusCode != http.StatusOK {
 		t.Fatalf("unpair: status %d", resp.StatusCode)
 	}
-	if _, ok := h.store.Device(testDevice); ok {
-		t.Fatal("device still stored")
+
+	if resp, _ := h.post(t, "/v1/pair", `{"device":"`+testDevice+`"}`, ""); resp.StatusCode != http.StatusForbidden {
+		t.Errorf("pair without a window: status %d", resp.StatusCode)
 	}
+	paired := openWindow(t, h)
 	if resp, body := h.post(t, "/v1/pair", `{"device":"`+testDevice+`"}`, ""); resp.StatusCode != http.StatusOK {
 		t.Errorf("pair: status %d: %s", resp.StatusCode, body)
 	}
+	<-paired
 }
 
 func TestPairedDeviceCannotBeTakenOver(t *testing.T) {

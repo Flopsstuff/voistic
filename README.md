@@ -131,7 +131,7 @@ brightness 0.2
 python tools/board.py "brightness 0.2"
 ```
 
-A button named under `devices` pairs by itself on its first press. For any other, run `voistic pair` first.
+To pair a button, run `voistic pair` on the computer it should belong to, and within two minutes start pairing on the button. A new button does that on its first press, any other with 5 short presses and a 5 s hold on the sixth. The button only ever talks to that computer, so several computers and several buttons can share a network.
 
 ## Server commands
 
@@ -140,7 +140,7 @@ voistic serve [--log <file>]     run the server
 voistic install | uninstall      run the server at login, or stop that, on macOS and Windows
 voistic check                    validate the config
 voistic devices                  list paired buttons
-voistic pair                     accept one button not in the config
+voistic pair                     accept one button
 voistic forget <device>          drop a button's key
 voistic test <device> <gesture>  run an action without the button
 voistic transcribe <file>        turn a recording into text next to it
@@ -166,7 +166,7 @@ A firmware from a release goes the same way, once you've run `voistic firmware v
 
 Requests are signed with HMAC-SHA256 under a per-device key, and a growing counter stops replays. There's no TLS, so the voice crosses your LAN unencrypted, and only the start of a recording is signed, not the audio. Audio goes to Groq for transcription.
 
-While a button named in the config has no key yet, anyone on the LAN can claim its id and take the key, though they can only run actions already configured. The Wi-Fi setup page is an open access point.
+While `voistic pair` is waiting, anyone on the LAN can take that one place, so run it just before pairing. The Wi-Fi setup page is an open access point.
 
 ## Development
 

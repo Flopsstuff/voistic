@@ -66,7 +66,7 @@ Voice: `POST /v1/audio?device=&seq=&rate=` is a chunked stream of 16-bit mono PC
 
 Updates: five short presses send a signed `POST /v1/update`. If the server holds a different version for that button, the signed answer carries its version, size and SHA-256, and the button fetches it from `GET /v1/firmware` into the free OTA slot, checks the hash and restarts. A new firmware stays on probation (`verifyRollbackLater` returns true) until `confirmFirmware` reaches the server, and otherwise the bootloader goes back. `scripts/version.py` stamps every build with a version, so a rebuild always counts as different.
 
-Pairing: `POST /v1/pair` succeeds for the device claiming an open `voistic pair` window, or for a device named in the config with no key yet. A device with a key must give it up first through a signed `POST /v1/unpair`, which the firmware does on its own.
+Pairing: `POST /v1/pair` only succeeds for the device claiming an open `voistic pair` window, so it's always asked for on the server, and with several servers on a network the rest refuse. The firmware asks every server that answers mDNS until one takes it. A button gives up its key through a signed `POST /v1/unpair`, which the firmware does on its own.
 
 CI: `.github/workflows/ci.yml` runs `go vet` and `go test` on Linux, macOS and Windows and builds the firmware. `release.yml`, on a `v*` tag, runs those, then `make dist` and the firmware, and publishes a GitHub release with `SHA256SUMS`. Nothing in CI can press keys, since a runner has no desktop, so pasting on Windows only gets tried on a real machine.
 
