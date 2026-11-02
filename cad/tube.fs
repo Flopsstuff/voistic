@@ -11,17 +11,17 @@ export const voisticTube = defineFeature(function(context is Context, id is Id, 
         annotation { "Name" : "Full length, with the cap" }
         isLength(definition.length, { (millimeter) : [20, 80, 300] } as LengthBoundSpec);
         annotation { "Name" : "Width" }
-        isLength(definition.width, { (millimeter) : [10, 28, 100] } as LengthBoundSpec);
+        isLength(definition.width, { (millimeter) : [10, 22, 100] } as LengthBoundSpec);
         annotation { "Name" : "Depth" }
-        isLength(definition.depth, { (millimeter) : [5, 20, 100] } as LengthBoundSpec);
+        isLength(definition.depth, { (millimeter) : [5, 18, 100] } as LengthBoundSpec);
         annotation { "Name" : "Cap height, outside the tube" }
         isLength(definition.capHeight, { (millimeter) : [0, 6, 50] } as LengthBoundSpec);
         annotation { "Name" : "Wall" }
-        isLength(definition.wall, { (millimeter) : [0.8, 1.8, 5] } as LengthBoundSpec);
+        isLength(definition.wall, { (millimeter) : [0.8, 1, 5] } as LengthBoundSpec);
         annotation { "Name" : "Floor" }
         isLength(definition.floor, { (millimeter) : [0.8, 2, 10] } as LengthBoundSpec);
         annotation { "Name" : "Long edge radius" }
-        isLength(definition.edgeRadius, { (millimeter) : [1, 7, 30] } as LengthBoundSpec);
+        isLength(definition.edgeRadius, { (millimeter) : [1, 4.5, 30] } as LengthBoundSpec);
         annotation { "Name" : "Foot chamfer" }
         isLength(definition.footChamfer, { (millimeter) : [0.2, 0.8, 5] } as LengthBoundSpec);
         annotation { "Name" : "Foot radius" }
@@ -40,7 +40,7 @@ export const voisticTube = defineFeature(function(context is Context, id is Id, 
         annotation { "Name" : "Square clearance, on the size" }
         isLength(definition.squareClearance, { (millimeter) : [0, 0.4, 2] } as LengthBoundSpec);
         annotation { "Name" : "Square pocket depth" }
-        isLength(definition.squarePocket, { (millimeter) : [0, 0.6, 3] } as LengthBoundSpec);
+        isLength(definition.squarePocket, { (millimeter) : [0, 0.3, 3] } as LengthBoundSpec);
 
         annotation { "Name" : "Vertical slit, button centre to its bottom end" }
         isLength(definition.slitFromButton, { (millimeter) : [1, 8, 100] } as LengthBoundSpec);
@@ -49,14 +49,14 @@ export const voisticTube = defineFeature(function(context is Context, id is Id, 
         annotation { "Name" : "Vertical slit, width" }
         isLength(definition.slitWidth, { (millimeter) : [0.3, 1, 5] } as LengthBoundSpec);
         annotation { "Name" : "Vertical slit, chamfer on both faces" }
-        isLength(definition.slitChamfer, { (millimeter) : [0.1, 0.5, 1] } as LengthBoundSpec);
+        isLength(definition.slitChamfer, { (millimeter) : [0.1, 0.3, 1] } as LengthBoundSpec);
 
-        annotation { "Name" : "Snap dimple from the top of the tube" }
-        isLength(definition.snapFromTop, { (millimeter) : [1, 18, 200] } as LengthBoundSpec);
-        annotation { "Name" : "Snap dimple depth" }
+        annotation { "Name" : "Snap dimples from the top of the tube" }
+        isLength(definition.snapFromTop, { (millimeter) : [1, 3, 200] } as LengthBoundSpec);
+        annotation { "Name" : "Snap dimples depth" }
         isLength(definition.snapDepth, { (millimeter) : [0.1, 0.6, 3] } as LengthBoundSpec);
-        annotation { "Name" : "Snap dimple diameter" }
-        isLength(definition.snapDiameter, { (millimeter) : [0.5, 3.4, 10] } as LengthBoundSpec);
+        annotation { "Name" : "Snap dimples diameter" }
+        isLength(definition.snapDiameter, { (millimeter) : [0.5, 4, 10] } as LengthBoundSpec);
     }
     {
         const w = definition.width;
@@ -155,13 +155,18 @@ export const voisticTube = defineFeature(function(context is Context, id is Id, 
             tools = append(tools, qCreatedBy(id + "square", EntityType.BODY));
         }
 
-        // Back wall: the dimple the bump on the cap's plate snaps into, a cap of a sphere
+        // Side walls: the dimples the bumps on the cap's skirt snap into, caps of spheres
         const snapHalf = definition.snapDiameter / 2;
         const snapR = (snapHalf * snapHalf + definition.snapDepth * definition.snapDepth) / (2 * definition.snapDepth);
-        opPoint(context, id + "snapCentre", { "point" : vector(0 * millimeter, d / 2 - t + definition.snapDepth - snapR, h - definition.snapFromTop) });
-        fSphere(context, id + "snap", { "center" : qCreatedBy(id + "snapCentre", EntityType.VERTEX), "radius" : snapR });
-        opDeleteBodies(context, id + "snapCentreGone", { "entities" : qCreatedBy(id + "snapCentre", EntityType.BODY) });
-        tools = append(tools, qCreatedBy(id + "snap", EntityType.BODY));
+        var snapSide = 0;
+        for (var sx in [-1, 1])
+        {
+            opPoint(context, id + ("snapCentre" ~ snapSide), { "point" : vector(sx * (w / 2 - t + definition.snapDepth - snapR), 0 * millimeter, h - definition.snapFromTop) });
+            fSphere(context, id + ("snap" ~ snapSide), { "center" : qCreatedBy(id + ("snapCentre" ~ snapSide), EntityType.VERTEX), "radius" : snapR });
+            opDeleteBodies(context, id + ("snapCentreGone" ~ snapSide), { "entities" : qCreatedBy(id + ("snapCentre" ~ snapSide), EntityType.BODY) });
+            tools = append(tools, qCreatedBy(id + ("snap" ~ snapSide), EntityType.BODY));
+            snapSide += 1;
+        }
 
         opBoolean(context, id + "cut", {
                     "tools" : qUnion(tools),
@@ -182,12 +187,12 @@ export const voisticTube = defineFeature(function(context is Context, id is Id, 
                     "width" : definition.slitChamfer });
     }, {
         "length" : 80 * millimeter,
-        "width" : 28 * millimeter,
-        "depth" : 20 * millimeter,
+        "width" : 22 * millimeter,
+        "depth" : 18 * millimeter,
         "capHeight" : 6 * millimeter,
-        "wall" : 1.8 * millimeter,
+        "wall" : 1 * millimeter,
         "floor" : 2 * millimeter,
-        "edgeRadius" : 7 * millimeter,
+        "edgeRadius" : 4.5 * millimeter,
         "footChamfer" : 0.8 * millimeter,
         "footRadius" : 3 * millimeter,
         "floorChamfer" : 1.5 * millimeter,
@@ -196,12 +201,12 @@ export const voisticTube = defineFeature(function(context is Context, id is Id, 
         "buttonCentreFromTop" : 18 * millimeter,
         "squareSize" : 12 * millimeter,
         "squareClearance" : 0.4 * millimeter,
-        "squarePocket" : 0.6 * millimeter,
+        "squarePocket" : 0.3 * millimeter,
         "slitFromButton" : 8 * millimeter,
         "slitHeight" : 6 * millimeter,
         "slitWidth" : 1 * millimeter,
-        "slitChamfer" : 0.5 * millimeter,
-        "snapFromTop" : 18 * millimeter,
+        "slitChamfer" : 0.3 * millimeter,
+        "snapFromTop" : 3 * millimeter,
         "snapDepth" : 0.6 * millimeter,
-        "snapDiameter" : 3.4 * millimeter
+        "snapDiameter" : 4 * millimeter
     });

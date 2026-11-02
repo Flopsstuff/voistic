@@ -2,11 +2,11 @@ FeatureScript 3112;
 import(path : "onshape/std/common.fs", version : "3112.0");
 
 // The cap of the voistic stick, in place on top of the tube from the Voistic Tube feature, so both share one set of
-// coordinates. Printed roof down. It plugs into the tube on its sides and back; the front stays open for the stack of
-// boards. One plate runs down the back wall from the roof: full thickness to the land that presses on the USB connector
-// and pushes the stack forward, then thinning to the tip, with a bump on its back that snaps into a dimple in the tube.
-// The USB window is the last cut. It runs through the roof and the plate down to the mouth of the connector, which leaves
-// a rib on each side of the plate, and the bottom of the cut slopes. With the roof on the bed nothing needs support.
+// coordinates. Printed roof down. A skirt all around plugs into the tube and bumps on its sides snap into dimples in the
+// tube. One plate runs down the back wall from the roof: full thickness to the land that presses on the USB connector and
+// pushes the stack forward, then thinning to the tip. The USB window is the last cut. It runs through the roof and the
+// plate down to the mouth of the connector, which leaves a rib on each side of the plate, and the bottom of the cut slopes.
+// With the roof on the bed nothing needs support.
 annotation { "Feature Type Name" : "Voistic Cap", "Feature Type Description" : "Cap of the voice stick with a pressing plate" }
 export const voisticCap = defineFeature(function(context is Context, id is Id, definition is map)
     precondition
@@ -14,15 +14,15 @@ export const voisticCap = defineFeature(function(context is Context, id is Id, d
         annotation { "Name" : "Full length, with the cap" }
         isLength(definition.length, { (millimeter) : [20, 80, 300] } as LengthBoundSpec);
         annotation { "Name" : "Width" }
-        isLength(definition.width, { (millimeter) : [10, 28, 100] } as LengthBoundSpec);
+        isLength(definition.width, { (millimeter) : [10, 22, 100] } as LengthBoundSpec);
         annotation { "Name" : "Depth" }
-        isLength(definition.depth, { (millimeter) : [5, 20, 100] } as LengthBoundSpec);
+        isLength(definition.depth, { (millimeter) : [5, 18, 100] } as LengthBoundSpec);
         annotation { "Name" : "Cap height, outside the tube" }
         isLength(definition.capHeight, { (millimeter) : [3, 6, 50] } as LengthBoundSpec);
         annotation { "Name" : "Tube wall" }
-        isLength(definition.wall, { (millimeter) : [0.8, 1.8, 5] } as LengthBoundSpec);
+        isLength(definition.wall, { (millimeter) : [0.8, 1, 5] } as LengthBoundSpec);
         annotation { "Name" : "Long edge radius" }
-        isLength(definition.edgeRadius, { (millimeter) : [1, 7, 30] } as LengthBoundSpec);
+        isLength(definition.edgeRadius, { (millimeter) : [1, 4.5, 30] } as LengthBoundSpec);
         annotation { "Name" : "Top chamfer" }
         isLength(definition.topChamfer, { (millimeter) : [0.2, 0.8, 5] } as LengthBoundSpec);
         annotation { "Name" : "Top radius" }
@@ -30,35 +30,35 @@ export const voisticCap = defineFeature(function(context is Context, id is Id, d
 
         annotation { "Name" : "Roof" }
         isLength(definition.roof, { (millimeter) : [0.8, 2, 5] } as LengthBoundSpec);
-        annotation { "Name" : "Plug into the tube, depth" }
-        isLength(definition.spigot, { (millimeter) : [1, 4, 20] } as LengthBoundSpec);
+        annotation { "Name" : "Skirt depth" }
+        isLength(definition.spigot, { (millimeter) : [1, 6, 20] } as LengthBoundSpec);
+        annotation { "Name" : "Skirt wall" }
+        isLength(definition.skirtWall, { (millimeter) : [0.5, 1, 3] } as LengthBoundSpec);
         annotation { "Name" : "Fit in the tube, on a side" }
-        isLength(definition.fit, { (millimeter) : [0, 0.15, 1] } as LengthBoundSpec);
+        isLength(definition.fit, { (millimeter) : [0, 0.1, 1] } as LengthBoundSpec);
 
-        annotation { "Name" : "Board width" }
-        isLength(definition.boardWidth, { (millimeter) : [5, 18, 40] } as LengthBoundSpec);
-        annotation { "Name" : "Room for solder, on a side" }
-        isLength(definition.sideGap, { (millimeter) : [0, 1.5, 5] } as LengthBoundSpec);
+        annotation { "Name" : "Microphone board width" }
+        isLength(definition.micWidth, { (millimeter) : [5, 16.5, 40] } as LengthBoundSpec);
         annotation { "Name" : "Stack, button top to USB top" }
         isLength(definition.stackThickness, { (millimeter) : [5, 14.5, 30] } as LengthBoundSpec);
         annotation { "Name" : "Button above its square" }
         isLength(definition.buttonHead, { (millimeter) : [0, 1.5, 5] } as LengthBoundSpec);
         annotation { "Name" : "Square pocket depth in the tube" }
-        isLength(definition.squarePocket, { (millimeter) : [0, 0.6, 3] } as LengthBoundSpec);
+        isLength(definition.squarePocket, { (millimeter) : [0, 0.3, 3] } as LengthBoundSpec);
         annotation { "Name" : "USB connector height" }
         isLength(definition.usbHeight, { (millimeter) : [1, 3.2, 10] } as LengthBoundSpec);
         annotation { "Name" : "USB mouth from the top of the tube" }
         isLength(definition.usbMouthFromTop, { (millimeter) : [1, 6, 60] } as LengthBoundSpec);
 
         annotation { "Name" : "USB window width" }
-        isLength(definition.usbWindowWidth, { (millimeter) : [5, 12, 26] } as LengthBoundSpec);
+        isLength(definition.usbWindowWidth, { (millimeter) : [5, 11, 26] } as LengthBoundSpec);
         annotation { "Name" : "USB window height" }
-        isLength(definition.usbWindowHeight, { (millimeter) : [3, 7, 18] } as LengthBoundSpec);
+        isLength(definition.usbWindowHeight, { (millimeter) : [3, 6, 18] } as LengthBoundSpec);
         annotation { "Name" : "USB window corner radius" }
         isLength(definition.usbWindowRadius, { (millimeter) : [0.2, 3, 10] } as LengthBoundSpec);
 
         annotation { "Name" : "Plate width" }
-        isLength(definition.plateWidth, { (millimeter) : [4, 14, 24] } as LengthBoundSpec);
+        isLength(definition.plateWidth, { (millimeter) : [4, 12.8, 24] } as LengthBoundSpec);
         annotation { "Name" : "Plate tip thickness" }
         isLength(definition.plateTip, { (millimeter) : [0.5, 1.2, 4] } as LengthBoundSpec);
         annotation { "Name" : "Plate tip from the top of the tube" }
@@ -69,15 +69,13 @@ export const voisticCap = defineFeature(function(context is Context, id is Id, d
         isLength(definition.plateRadius, { (millimeter) : [0.5, 10, 50] } as LengthBoundSpec);
         annotation { "Name" : "Plate tip corner chamfer" }
         isLength(definition.tipChamfer, { (millimeter) : [0.1, 1, 5] } as LengthBoundSpec);
-        annotation { "Name" : "Slope on the plug's side walls, length" }
-        isLength(definition.spigotSlope, { (millimeter) : [1, 8, 20] } as LengthBoundSpec);
 
-        annotation { "Name" : "Snap bump from the top of the tube" }
-        isLength(definition.snapFromTop, { (millimeter) : [1, 18, 70] } as LengthBoundSpec);
-        annotation { "Name" : "Snap bump height" }
-        isLength(definition.snapHeight, { (millimeter) : [0.1, 0.5, 2] } as LengthBoundSpec);
-        annotation { "Name" : "Snap bump diameter" }
-        isLength(definition.snapDiameter, { (millimeter) : [0.5, 3, 10] } as LengthBoundSpec);
+        annotation { "Name" : "Snap bumps from the top of the tube" }
+        isLength(definition.snapFromTop, { (millimeter) : [1, 3, 70] } as LengthBoundSpec);
+        annotation { "Name" : "Snap bumps height" }
+        isLength(definition.snapHeight, { (millimeter) : [0.1, 0.6, 2] } as LengthBoundSpec);
+        annotation { "Name" : "Snap bumps diameter" }
+        isLength(definition.snapDiameter, { (millimeter) : [0.5, 4, 10] } as LengthBoundSpec);
     }
     {
         const w = definition.width;
@@ -101,7 +99,10 @@ export const voisticCap = defineFeature(function(context is Context, id is Id, d
         const mouthZ = h - definition.usbMouthFromTop;
         const landBottom = mouthZ - definition.landLength;
         const tipZ = h - definition.plateLength;
-        const halfSide = definition.boardWidth / 2 + definition.sideGap;
+        const fw = w / 2 - t - definition.fit;
+        const fd = d / 2 - t - definition.fit;
+        const roomW = fw - definition.skirtWall;
+        const roomD = fd - definition.skirtWall;
 
         if (usbBack >= tubeBack)
             throw regenError("The stack does not fit in the tube", ["stackThickness"]);
@@ -113,8 +114,10 @@ export const voisticCap = defineFeature(function(context is Context, id is Id, d
             throw regenError("The window radius is too big for the window", ["usbWindowRadius"]);
         if (definition.roof >= definition.capHeight)
             throw regenError("The roof is thicker than the cap", ["roof"]);
-        if (halfSide >= w / 2 - t - definition.fit)
-            throw regenError("The boards leave no side walls for the plug", ["sideGap"]);
+        if (roomW <= definition.micWidth / 2)
+            throw regenError("The microphone board does not fit inside the skirt", ["skirtWall"]);
+        if (definition.snapFromTop + definition.snapDiameter / 2 >= definition.spigot)
+            throw regenError("The snap bumps run off the skirt", ["snapFromTop"]);
         if (landBottom <= tipZ)
             throw regenError("The plate ends before the pressing land", ["plateLength"]);
         if (definition.plateTip >= backY - usbBack)
@@ -138,9 +141,7 @@ export const voisticCap = defineFeature(function(context is Context, id is Id, d
                             plane(vector(0 * millimeter, 0 * millimeter, top - definition.topChamfer), vector(0, 0, 1))),
                     "radius" : definition.topRadius });
 
-        // The plug: the inside of the tube less the fit
-        const fw = w / 2 - t - definition.fit;
-        const fd = d / 2 - t - definition.fit;
+        // The skirt: the inside of the tube less the fit
         fCuboid(context, id + "spigot", {
                     "corner1" : vector(-fw, -fd, h - definition.spigot),
                     "corner2" : vector(fw, fd, h + 1 * millimeter) });
@@ -152,20 +153,19 @@ export const voisticCap = defineFeature(function(context is Context, id is Id, d
                     "tools" : qUnion([body, spigot]),
                     "operationType" : BooleanOperationType.UNION });
 
-        // Room for the stack, open to the front, so the plug is left on the sides and the back
+        // Room inside the skirt, for the end of the stack
         fCuboid(context, id + "room", {
-                    "corner1" : vector(-halfSide, squareFace, h - definition.spigot - 1 * millimeter),
-                    "corner2" : vector(halfSide, windowBack, roofZ) });
+                    "corner1" : vector(-roomW, -roomD, h - definition.spigot - 1 * millimeter),
+                    "corner2" : vector(roomW, roomD, roofZ) });
         const room = qCreatedBy(id + "room", EntityType.BODY);
         opFillet(context, id + "roomEdges", {
                     "entities" : qParallelEdges(qOwnedByBody(room, EntityType.EDGE), vector(0, 0, 1)),
-                    "radius" : 3 * millimeter });
+                    "radius" : rc - t - definition.fit - definition.skirtWall });
         opBoolean(context, id + "cutRoom", {
                     "tools" : room,
                     "targets" : body,
                     "operationType" : BooleanOperationType.SUBTRACTION });
 
-        // The side walls of the plug slope away towards the front, so they end in no sharp points
         const yz = function(name is string, x is ValueWithUnits, width is ValueWithUnits, points is array)
             {
                 const sketch = newSketchOnPlane(context, id + (name ~ "Sketch"), {
@@ -180,16 +180,6 @@ export const voisticCap = defineFeature(function(context is Context, id is Id, d
                 opDeleteBodies(context, id + (name ~ "SketchGone"), { "entities" : qCreatedBy(id + (name ~ "Sketch"), EntityType.BODY) });
                 return qCreatedBy(id + name, EntityType.BODY);
             };
-        const slopeFront = tubeFront - 1 * millimeter;
-        const slopeRun = definition.spigotSlope + 1 * millimeter;
-        const slopeBottom = h - definition.spigot - 1 * millimeter;
-        opBoolean(context, id + "cutSlope", {
-                    "tools" : yz("slope", -w / 2, w, [
-                            vector(slopeFront, h),
-                            vector(slopeFront, slopeBottom),
-                            vector(slopeFront + slopeRun * (definition.spigot + 1 * millimeter) / definition.spigot, slopeBottom)]),
-                    "targets" : body,
-                    "operationType" : BooleanOperationType.SUBTRACTION });
 
         // The plate: from the roof to the land on the USB connector at full thickness, then down to the tip
         const pw = definition.plateWidth;
@@ -211,22 +201,31 @@ export const voisticCap = defineFeature(function(context is Context, id is Id, d
                     "entities" : qContainsPoint(plateEdges, vector(0 * millimeter, usbBack, landBottom)),
                     "radius" : definition.plateRadius });
 
-        // The bump: a cap of a sphere on the back of the plate
+        // The bumps on the sides of the skirt, caps of spheres
         const snapHalf = definition.snapDiameter / 2;
         const snapR = (snapHalf * snapHalf + definition.snapHeight * definition.snapHeight) / (2 * definition.snapHeight);
-        opPoint(context, id + "snapCentre", { "point" : vector(0 * millimeter, backY + definition.snapHeight - snapR, snapZ) });
-        fSphere(context, id + "snap", { "center" : qCreatedBy(id + "snapCentre", EntityType.VERTEX), "radius" : snapR });
-        opDeleteBodies(context, id + "snapCentreGone", { "entities" : qCreatedBy(id + "snapCentre", EntityType.BODY) });
-        const snap = qCreatedBy(id + "snap", EntityType.BODY);
-        fCuboid(context, id + "snapTrim", {
-                    "corner1" : vector(-snapR - 1 * millimeter, backY - snapR - snapR, snapZ - snapR - 1 * millimeter),
-                    "corner2" : vector(snapR + 1 * millimeter, backY - 0.2 * millimeter, snapZ + snapR + 1 * millimeter) });
-        opBoolean(context, id + "cutSnap", {
-                    "tools" : qCreatedBy(id + "snapTrim", EntityType.BODY),
-                    "targets" : snap,
-                    "operationType" : BooleanOperationType.SUBTRACTION });
+        var joined = [body, plate];
+        var snapSide = 0;
+        for (var sx in [-1, 1])
+        {
+            opPoint(context, id + ("snapCentre" ~ snapSide), { "point" : vector(sx * (fw + definition.snapHeight - snapR), 0 * millimeter, snapZ) });
+            fSphere(context, id + ("snap" ~ snapSide), { "center" : qCreatedBy(id + ("snapCentre" ~ snapSide), EntityType.VERTEX), "radius" : snapR });
+            opDeleteBodies(context, id + ("snapCentreGone" ~ snapSide), { "entities" : qCreatedBy(id + ("snapCentre" ~ snapSide), EntityType.BODY) });
+            const snap = qCreatedBy(id + ("snap" ~ snapSide), EntityType.BODY);
+            const trimA = sx * (fw - 0.2 * millimeter);
+            const trimB = sx * (fw - 2 * snapR - 1 * millimeter);
+            fCuboid(context, id + ("snapTrim" ~ snapSide), {
+                        "corner1" : vector(min(trimA, trimB), -snapR - 1 * millimeter, snapZ - snapR - 1 * millimeter),
+                        "corner2" : vector(max(trimA, trimB), snapR + 1 * millimeter, snapZ + snapR + 1 * millimeter) });
+            opBoolean(context, id + ("cutSnap" ~ snapSide), {
+                        "tools" : qCreatedBy(id + ("snapTrim" ~ snapSide), EntityType.BODY),
+                        "targets" : snap,
+                        "operationType" : BooleanOperationType.SUBTRACTION });
+            joined = append(joined, snap);
+            snapSide += 1;
+        }
         opBoolean(context, id + "joinPlate", {
-                    "tools" : qUnion([body, plate, snap]),
+                    "tools" : qUnion(joined),
                     "operationType" : BooleanOperationType.UNION });
 
         // Last, the USB window, built from pieces so that a radius of half the height gives a full round end
@@ -274,34 +273,33 @@ export const voisticCap = defineFeature(function(context is Context, id is Id, d
                     "operationType" : BooleanOperationType.SUBTRACTION });
     }, {
         "length" : 80 * millimeter,
-        "width" : 28 * millimeter,
-        "depth" : 20 * millimeter,
+        "width" : 22 * millimeter,
+        "depth" : 18 * millimeter,
         "capHeight" : 6 * millimeter,
-        "wall" : 1.8 * millimeter,
-        "edgeRadius" : 7 * millimeter,
+        "wall" : 1 * millimeter,
+        "edgeRadius" : 4.5 * millimeter,
         "topChamfer" : 0.8 * millimeter,
         "topRadius" : 3 * millimeter,
         "roof" : 2 * millimeter,
-        "spigot" : 4 * millimeter,
-        "fit" : 0.15 * millimeter,
-        "boardWidth" : 18 * millimeter,
-        "sideGap" : 1.5 * millimeter,
+        "spigot" : 6 * millimeter,
+        "skirtWall" : 1 * millimeter,
+        "fit" : 0.1 * millimeter,
+        "micWidth" : 16.5 * millimeter,
         "stackThickness" : 14.5 * millimeter,
         "buttonHead" : 1.5 * millimeter,
-        "squarePocket" : 0.6 * millimeter,
+        "squarePocket" : 0.3 * millimeter,
         "usbHeight" : 3.2 * millimeter,
         "usbMouthFromTop" : 6 * millimeter,
-        "usbWindowWidth" : 12 * millimeter,
-        "usbWindowHeight" : 7 * millimeter,
+        "usbWindowWidth" : 11 * millimeter,
+        "usbWindowHeight" : 6 * millimeter,
         "usbWindowRadius" : 3 * millimeter,
-        "plateWidth" : 14 * millimeter,
+        "plateWidth" : 12.8 * millimeter,
         "plateTip" : 1.2 * millimeter,
         "plateLength" : 20 * millimeter,
         "landLength" : 3 * millimeter,
         "plateRadius" : 10 * millimeter,
         "tipChamfer" : 1 * millimeter,
-        "spigotSlope" : 8 * millimeter,
-        "snapFromTop" : 18 * millimeter,
-        "snapHeight" : 0.5 * millimeter,
-        "snapDiameter" : 3 * millimeter
+        "snapFromTop" : 3 * millimeter,
+        "snapHeight" : 0.6 * millimeter,
+        "snapDiameter" : 4 * millimeter
     });
