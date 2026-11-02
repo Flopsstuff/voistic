@@ -6,7 +6,7 @@ import (
 	"log/slog"
 	"net"
 	"os"
-	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -18,6 +18,9 @@ const (
 	service = "_voistic._tcp"
 	// How often to notice a changed address, such as a new DHCP lease.
 	refreshInterval = time.Minute
+	// A public address, only to ask which way the default route goes. A UDP dial
+	// sends nothing.
+	routeProbe = "1.1.1.1:53"
 )
 
 // Advertiser publishes the service until Stop is called.
@@ -28,7 +31,7 @@ type Advertiser struct {
 
 	mu     sync.Mutex
 	server *mdns.Server
-	ips    []net.IP
+	ip     net.IP
 }
 
 // Start begins advertising port.
@@ -37,7 +40,7 @@ func Start(port int, log *slog.Logger) (*Advertiser, error) {
 
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	if err := a.restart(localIPs()); err != nil {
+	if err := a.restart(primary()); err != nil {
 		return nil, err
 	}
 	go a.watchAddresses()
@@ -55,6 +58,21 @@ func (a *Advertiser) Stop() {
 	}
 }
 
+// Refresh starts advertising anew on a new socket and returns where buttons find
+// this server, or "offline". A socket can go deaf with nothing to show for it, so
+// pairing doesn't rely on the one that's there.
+func (a *Advertiser) Refresh() string {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if err := a.restart(primary()); err != nil {
+		a.log.Error("can't update mDNS", "err", err)
+	}
+	if a.ip == nil {
+		return "offline"
+	}
+	return net.JoinHostPort(a.ip.String(), strconv.Itoa(a.port))
+}
+
 func (a *Advertiser) watchAddresses() {
 	ticker := time.NewTicker(refreshInterval)
 	defer ticker.Stop()
@@ -64,9 +82,9 @@ func (a *Advertiser) watchAddresses() {
 			return
 		case <-ticker.C:
 			a.mu.Lock()
-			if ips := localIPs(); !sameIPs(ips, a.ips) {
-				a.log.Info("addresses changed, updating mDNS", "ips", ips)
-				if err := a.restart(ips); err != nil {
+			if iface, ip := primary(); !ip.Equal(a.ip) {
+				a.log.Info("address changed, updating mDNS", "ip", ip)
+				if err := a.restart(iface, ip); err != nil {
 					a.log.Error("can't update mDNS", "err", err)
 				}
 			}
@@ -77,13 +95,13 @@ func (a *Advertiser) watchAddresses() {
 
 // restart replaces the server, since the library can't change a running one.
 // Callers hold a.mu.
-func (a *Advertiser) restart(ips []net.IP) error {
+func (a *Advertiser) restart(iface *net.Interface, ip net.IP) error {
 	if a.server != nil {
 		a.server.Shutdown()
 		a.server = nil
 	}
-	a.ips = ips
-	if len(ips) == 0 {
+	a.ip = ip
+	if iface == nil {
 		return nil // offline, watchAddresses retries once an address appears
 	}
 
@@ -93,43 +111,52 @@ func (a *Advertiser) restart(ips []net.IP) error {
 	}
 	hostname, _, _ = strings.Cut(hostname, ".") // drop .local, .home and the like
 
-	zone, err := mdns.NewMDNSService(hostname, service, "", hostname+".local.", a.port, ips, []string{"v=1"})
+	zone, err := mdns.NewMDNSService(hostname, service, "", hostname+".local.", a.port, []net.IP{ip}, []string{"v=1"})
 	if err != nil {
 		return err
 	}
-	server, err := mdns.NewServer(&mdns.Config{Zone: zone})
+	server, err := mdns.NewServer(&mdns.Config{Zone: zone, Iface: iface})
 	if err != nil {
 		return err
 	}
 	a.server = server
+	a.log.Info("advertising over mDNS", "interface", iface.Name, "ip", ip)
 	return nil
 }
 
-func localIPs() []net.IP {
+// primary finds the network card the default route leaves through, the one the
+// buttons are on, with its address. Only that card counts. The virtual ones of
+// WSL or a VM can't be reached from the LAN, and left to itself the system may
+// join the mDNS group on one of them, so the server would hear nothing.
+func primary() (*net.Interface, net.IP) {
+	conn, err := net.Dial("udp4", routeProbe)
+	if err != nil {
+		return nil, nil
+	}
+	defer conn.Close()
+	ip := conn.LocalAddr().(*net.UDPAddr).IP.To4()
+	iface := interfaceWith(ip)
+	if iface == nil {
+		return nil, nil
+	}
+	return iface, ip
+}
+
+func interfaceWith(ip net.IP) *net.Interface {
 	interfaces, err := net.Interfaces()
 	if err != nil {
 		return nil
 	}
-	var ips []net.IP
-	for _, iface := range interfaces {
-		if iface.Flags&net.FlagUp == 0 || iface.Flags&net.FlagLoopback != 0 {
-			continue
-		}
-		addrs, err := iface.Addrs()
+	for i := range interfaces {
+		addrs, err := interfaces[i].Addrs()
 		if err != nil {
 			continue
 		}
 		for _, addr := range addrs {
-			if ipNet, ok := addr.(*net.IPNet); ok {
-				if ip := ipNet.IP.To4(); ip != nil && !ip.IsLinkLocalUnicast() {
-					ips = append(ips, ip)
-				}
+			if ipNet, ok := addr.(*net.IPNet); ok && ipNet.IP.Equal(ip) {
+				return &interfaces[i]
 			}
 		}
 	}
-	return ips
-}
-
-func sameIPs(a, b []net.IP) bool {
-	return slices.EqualFunc(a, b, net.IP.Equal)
+	return nil
 }

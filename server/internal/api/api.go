@@ -211,7 +211,7 @@ func (s *Server) pair(w http.ResponseWriter, r *http.Request) {
 	// Only a `voistic pair` window lets a device in, so pairing is always asked for
 	// on this computer. With several servers on a network, the others refuse.
 	if !s.Pairing.Claim(req.Device) {
-		s.Log.Warn("refused pairing", "device", req.Device)
+		s.Log.Warn("refused pairing, the window is closed", "device", req.Device, "from", r.RemoteAddr)
 		http.Error(w, "pairing is closed", http.StatusForbidden)
 		return
 	}
@@ -228,7 +228,7 @@ func (s *Server) pair(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "can't save state", http.StatusInternalServerError)
 		return
 	}
-	s.Log.Info("paired", "device", req.Device)
+	s.Log.Info("paired", "device", req.Device, "from", r.RemoteAddr)
 	writeJSON(w, pairResponse{Key: key})
 }
 

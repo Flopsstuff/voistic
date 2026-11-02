@@ -58,6 +58,7 @@ type Server struct {
 	Config  func() (*config.Config, error)
 	Store   *store.Store
 	Pairing *pairing.Window
+	Refresh func() string // renews mDNS, returns where buttons find this server
 	Log     *slog.Logger
 }
 
@@ -116,11 +117,14 @@ func (s *Server) pair(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), PairWindow)
 	defer cancel()
 
+	s.Log.Info("pairing window open", "address", s.Refresh(), "for", PairWindow)
 	device, err := s.Pairing.Wait(ctx)
 	switch {
 	case errors.Is(err, pairing.ErrBusy):
+		s.Log.Warn("pairing window already open")
 		http.Error(w, err.Error(), http.StatusConflict)
 	case errors.Is(err, context.DeadlineExceeded):
+		s.Log.Warn("pairing window closed, no button showed up")
 		http.Error(w, "no button showed up", http.StatusGatewayTimeout)
 	case err != nil:
 		http.Error(w, err.Error(), http.StatusInternalServerError)

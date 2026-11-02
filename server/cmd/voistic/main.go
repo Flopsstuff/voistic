@@ -194,7 +194,7 @@ func serve(p paths, output io.Writer) error {
 		server.Close()
 	}()
 
-	cli := &control.Server{Config: loader.Get, Store: states, Pairing: window, Log: log}
+	cli := &control.Server{Config: loader.Get, Store: states, Pairing: window, Refresh: advertiser.Refresh, Log: log}
 	controlDone := make(chan error, 1)
 	go func() { controlDone <- cli.Serve(ctx, p.socket) }()
 

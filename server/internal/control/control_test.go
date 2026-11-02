@@ -34,6 +34,7 @@ func start(t *testing.T) (*Client, *pairing.Window, string) {
 
 	window := &pairing.Window{}
 	server := &Server{
+		Refresh: func() string { return "192.0.2.1:8787" },
 		Config: func() (*config.Config, error) {
 			return &config.Config{Devices: map[string]config.Device{
 				"dev": {Name: "Bedside", Gestures: map[string]config.Action{
