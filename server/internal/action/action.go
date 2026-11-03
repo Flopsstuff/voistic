@@ -48,6 +48,9 @@ func Run(ctx context.Context, a config.Action, event Event) (string, error) {
 		return runHTTP(ctx, *a.HTTP)
 	case a.Key != "":
 		return "", paste.Key(ctx, a.Key)
+	case a.Unpaste:
+		erased, err := paste.Unpaste(ctx)
+		return fmt.Sprintf("erased %d characters", erased), err
 	}
 	return runExec(ctx, a.Exec, event)
 }

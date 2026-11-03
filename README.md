@@ -96,7 +96,9 @@ devices:
         key: esc
 ```
 
-The file holds your API key, so keep it private with `chmod 600`. Edits apply on the next press. An action is one of `key`, which presses `enter`, `tab` or `esc` on macOS and Windows, `exec`, and `http`, with `url`, `method`, `headers` and `json` or `body`.
+The file holds your API key, so keep it private with `chmod 600`. Edits apply on the next press. An action is one of `key`, which presses `enter`, `tab` or `esc` on macOS and Windows, `exec`, `http`, with `url`, `method`, `headers` and `json` or `body`, and `unpaste: true`.
+
+`unpaste` erases the last pasted transcript with one backspace a character, all sent at once, which takes about 2 ms a character. It works anywhere a backspace does, terminals included, as long as the cursor is still right after the paste. Each paste can be erased once, within 2 minutes. Pasted text is always one line, since line breaks become spaces, which also keeps Claude Code from folding it into a placeholder.
 
 Then run the server at login, as a launchd agent on macOS:
 

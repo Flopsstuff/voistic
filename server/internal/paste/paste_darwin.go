@@ -42,6 +42,13 @@ func pasteText(ctx context.Context, text string) error {
 	return run(ctx, "", "osascript", "-e", pressPaste)
 }
 
+// pressBackspace runs one script, so the presses don't each start a process.
+// Key code 51 is Delete, the Mac's backspace.
+func pressBackspace(ctx context.Context, count int) error {
+	script := fmt.Sprintf("tell application \"System Events\"\nrepeat %d times\nkey code 51\nend repeat\nend tell", count)
+	return run(ctx, "", "osascript", "-e", script)
+}
+
 func pressKey(ctx context.Context, name string) error {
 	script := fmt.Sprintf(`tell application "System Events" to key code %d`, keyCodes[name])
 	return run(ctx, "", "osascript", "-e", script)

@@ -46,6 +46,8 @@ const (
 
 var virtualKeys = map[string]uint16{"enter": 0x0D, "tab": 0x09, "esc": 0x1B}
 
+const vkBack = 0x08
+
 // keyInput is an INPUT holding a KEYBDINPUT, with the padding of the union in a
 // 64-bit build.
 type keyInput struct {
@@ -70,6 +72,15 @@ func pressKey(_ context.Context, name string) error {
 	return press(virtualKeys[name])
 }
 
+// pressBackspace sends every press in one SendInput call.
+func pressBackspace(_ context.Context, count int) error {
+	inputs := make([]keyInput, 0, 2*count)
+	for range count {
+		inputs = append(inputs, chord(vkBack)...)
+	}
+	return send(inputs)
+}
+
 // chord presses the keys in order and lets them go in reverse.
 func chord(keys ...uint16) []keyInput {
 	inputs := make([]keyInput, 0, 2*len(keys))
@@ -83,7 +94,10 @@ func chord(keys ...uint16) []keyInput {
 }
 
 func press(keys ...uint16) error {
-	inputs := chord(keys...)
+	return send(chord(keys...))
+}
+
+func send(inputs []keyInput) error {
 	sent, _, err := sendInput.Call(uintptr(len(inputs)), uintptr(unsafe.Pointer(&inputs[0])), unsafe.Sizeof(inputs[0]))
 	if sent != uintptr(len(inputs)) {
 		return fmt.Errorf("SendInput, the active window may be running as administrator: %w", err)

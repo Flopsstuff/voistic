@@ -71,11 +71,12 @@ func (c *Config) AwakeFor(device string) time.Duration {
 	return DefaultDeepSleepAfter
 }
 
-// Action is what a gesture does. Exactly one of Exec, HTTP and Key is set.
+// Action is what a gesture does. Exactly one of Exec, HTTP, Key and Unpaste is set.
 type Action struct {
 	Exec    []string      `yaml:"exec"`
 	HTTP    *HTTP         `yaml:"http"`
-	Key     string        `yaml:"key"` // a key to press, on macOS and Windows
+	Key     string        `yaml:"key"`     // a key to press, on macOS and Windows
+	Unpaste bool          `yaml:"unpaste"` // erase the last pasted transcript
 	Timeout time.Duration `yaml:"timeout"`
 }
 
@@ -140,13 +141,13 @@ func (c *Config) validate() error {
 
 func (a Action) validate() error {
 	kinds := 0
-	for _, set := range []bool{len(a.Exec) > 0, a.HTTP != nil, a.Key != ""} {
+	for _, set := range []bool{len(a.Exec) > 0, a.HTTP != nil, a.Key != "", a.Unpaste} {
 		if set {
 			kinds++
 		}
 	}
 	if kinds != 1 {
-		return errors.New("set exactly one of exec, http and key")
+		return errors.New("set exactly one of exec, http, key and unpaste")
 	}
 	if a.Key != "" && !paste.IsKey(a.Key) {
 		return fmt.Errorf("unknown key %q, use one of %v", a.Key, paste.Keys)
