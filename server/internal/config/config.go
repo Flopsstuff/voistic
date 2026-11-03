@@ -53,6 +53,22 @@ type Groq struct {
 type Device struct {
 	Name     string            `yaml:"name"`
 	Gestures map[string]Action `yaml:"gestures"`
+	// How long a button that can stays connected after a press before deep
+	// sleep, see AwakeFor.
+	DeepSleepAfter time.Duration `yaml:"deep_sleep_after"`
+}
+
+// DefaultDeepSleepAfter is how long a button stays connected when the config
+// doesn't say.
+const DefaultDeepSleepAfter = 30 * time.Minute
+
+// AwakeFor is how long the device stays connected after a press. Only a board
+// that can keep Wi-Fi in light sleep uses it, the XIAO always sleeps at once.
+func (c *Config) AwakeFor(device string) time.Duration {
+	if after := c.Devices[device].DeepSleepAfter; after > 0 {
+		return after
+	}
+	return DefaultDeepSleepAfter
 }
 
 // Action is what a gesture does. Exactly one of Exec, HTTP and Key is set.
@@ -107,6 +123,9 @@ func Load(path string) (*Config, error) {
 
 func (c *Config) validate() error {
 	for id, device := range c.Devices {
+		if device.DeepSleepAfter < 0 {
+			return fmt.Errorf("device %s: deep_sleep_after can't be negative", id)
+		}
 		for gesture, action := range device.Gestures {
 			if !isGesture(gesture) {
 				return fmt.Errorf("device %s: unknown gesture %q", id, gesture)

@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"voistic/server/internal/action"
+	"voistic/server/internal/board"
 	"voistic/server/internal/config"
 	"voistic/server/internal/pairing"
 	"voistic/server/internal/store"
@@ -32,6 +33,8 @@ type Device struct {
 	ID       string    `json:"id"`
 	Name     string    `json:"name"`
 	Firmware string    `json:"firmware"`
+	Board    string    `json:"board"`
+	Battery  int       `json:"battery_mv"`
 	Seq      uint64    `json:"seq"`
 	LastSeen time.Time `json:"last_seen"`
 }
@@ -187,6 +190,8 @@ func (s *Server) devices(w http.ResponseWriter, _ *http.Request) {
 			ID:       id,
 			Name:     cfg.Devices[id].Name,
 			Firmware: device.Firmware,
+			Board:    board.Of(device.Board),
+			Battery:  device.Battery,
 			Seq:      device.Seq,
 			LastSeen: device.LastSeen,
 		})

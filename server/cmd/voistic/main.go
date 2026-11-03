@@ -18,6 +18,7 @@ import (
 
 	"voistic/server/internal/action"
 	"voistic/server/internal/api"
+	"voistic/server/internal/board"
 	"voistic/server/internal/config"
 	"voistic/server/internal/control"
 	"voistic/server/internal/discovery"
@@ -276,11 +277,19 @@ func firmwares(p paths) firmware.Store {
 }
 
 func addFirmware(p paths, device, file, version string) error {
-	info, err := firmwares(p).Add(device, file, version)
+	states, err := store.Open(filepath.Join(p.state, "state.json"))
 	if err != nil {
 		return err
 	}
-	fmt.Printf("%s will get %s, %d bytes, on 5 presses.\n", device, info.Version, info.Size)
+	paired, ok := states.Device(device)
+	if !ok {
+		return fmt.Errorf("%s isn't paired", device)
+	}
+	info, err := firmwares(p).Add(device, board.Of(paired.Board), file, version)
+	if err != nil {
+		return err
+	}
+	fmt.Printf("%s (%s) will get %s, %d bytes, on 5 presses.\n", device, info.Board, info.Version, info.Size)
 	return nil
 }
 
@@ -349,8 +358,13 @@ func listDevices(client *control.Client) error {
 		if !device.LastSeen.IsZero() {
 			seen = device.LastSeen.Local().Format(time.DateTime)
 		}
-		fmt.Printf("%-16s %-20s fw %-8s presses %-6s last seen %s\n",
-			device.ID, device.Name, device.Firmware, strconv.FormatUint(device.Seq, 10), seen)
+		battery := "-"
+		if device.Battery > 0 {
+			battery = fmt.Sprintf("%.2f V", float64(device.Battery)/1000)
+		}
+		fmt.Printf("%-16s %-20s %-14s fw %-8s battery %-7s presses %-6s last seen %s\n",
+			device.ID, device.Name, device.Board, device.Firmware, battery,
+			strconv.FormatUint(device.Seq, 10), seen)
 	}
 	return nil
 }

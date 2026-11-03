@@ -131,3 +131,29 @@ func TestRecordingsAreKeptUnlessTurnedOff(t *testing.T) {
 		}
 	}
 }
+
+func TestDeepSleepAfter(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.yaml")
+	write(t, path, `
+devices:
+  voistic-25bc:
+    deep_sleep_after: 20m
+  voistic-9af4:
+    name: No setting
+`)
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := cfg.AwakeFor("voistic-25bc"); got != 20*time.Minute {
+		t.Errorf("set: %v", got)
+	}
+	if got := cfg.AwakeFor("voistic-9af4"); got != DefaultDeepSleepAfter {
+		t.Errorf("default: %v", got)
+	}
+
+	write(t, path, "devices:\n  voistic-25bc:\n    deep_sleep_after: -1m\n")
+	if _, err := Load(path); err == nil {
+		t.Error("a negative time was accepted")
+	}
+}

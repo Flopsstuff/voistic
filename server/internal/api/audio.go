@@ -74,7 +74,7 @@ func (s *Server) audio(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Saved first, so the same request can't be replayed once the stream ends.
-	response, err := json.Marshal(pressResponse{Status: StatusOK, Seq: seq})
+	response, err := json.Marshal(pressResponse{Status: StatusOK, Awake: int(cfg.AwakeFor(id).Seconds()), Seq: seq})
 	if err != nil {
 		http.Error(w, "encode", http.StatusInternalServerError)
 		return

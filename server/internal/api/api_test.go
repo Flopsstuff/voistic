@@ -15,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	"voistic/server/internal/board"
 	"voistic/server/internal/config"
 	"voistic/server/internal/firmware"
 	"voistic/server/internal/pairing"
@@ -438,11 +439,12 @@ func TestAudioNeedsAValidSignature(t *testing.T) {
 func TestUpdateOffersAnotherVersionAndServesIt(t *testing.T) {
 	h := newHarness(t)
 	source := filepath.Join(t.TempDir(), "firmware.bin")
-	image := "\xE9image"
+	// An ESP32-S3 image header, the chip the test device's board has.
+	image := "\xE9\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x09\x00image"
 	if err := os.WriteFile(source, []byte(image), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	info, err := h.api.Firmware.Add(testDevice, source, "new")
+	info, err := h.api.Firmware.Add(testDevice, board.XiaoS3, source, "new")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -500,5 +502,66 @@ func TestUpdateOffersAnotherVersionAndServesIt(t *testing.T) {
 	}
 	if code, _ := fetch(1, true); code != http.StatusConflict {
 		t.Errorf("old seq got %d", code)
+	}
+}
+
+func TestPairAndPressRememberTheBoard(t *testing.T) {
+	h := newHarness(t)
+	openWindow(t, h)
+	resp, body := h.post(t, "/v1/pair", `{"device":"voistic-c6","fw":"1.0.0","board":"iot-button-c6"}`, "")
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status %d: %s", resp.StatusCode, body)
+	}
+	var answer pairResponse
+	json.Unmarshal([]byte(body), &answer)
+	if device, _ := h.store.Device("voistic-c6"); device.Board != "iot-button-c6" {
+		t.Fatalf("board after pairing %q", device.Board)
+	}
+
+	data, _ := json.Marshal(pressRequest{Device: "voistic-c6", Gesture: "single", Seq: 1, Battery: 3912})
+	signature, _ := Sign(answer.Key, data)
+	if resp, body := h.post(t, "/v1/press", string(data), signature); resp.StatusCode != http.StatusOK {
+		t.Fatalf("press: status %d: %s", resp.StatusCode, body)
+	}
+	device, _ := h.store.Device("voistic-c6")
+	if device.Board != "iot-button-c6" || device.Battery != 3912 {
+		t.Errorf("a press without a board forgot it, or lost the battery: %+v", device)
+	}
+}
+
+func TestAnswerSaysHowLongToStayAwake(t *testing.T) {
+	h := newHarness(t)
+	_, body := h.press(t, "single", 1)
+	var answer pressResponse
+	if err := json.Unmarshal([]byte(body), &answer); err != nil {
+		t.Fatal(err)
+	}
+	if answer.Awake != int(config.DefaultDeepSleepAfter.Seconds()) {
+		t.Errorf("awake_s = %d", answer.Awake)
+	}
+	if !strings.HasSuffix(body, fmt.Sprintf(`"seq":%d}`, answer.Seq)) {
+		t.Errorf("seq isn't last, the firmware looks for it there: %s", body)
+	}
+}
+
+func TestUpdateWontOfferAnImageForAnotherBoard(t *testing.T) {
+	h := newHarness(t)
+	source := filepath.Join(t.TempDir(), "firmware.bin")
+	image := "\xE9\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x09\x00image"
+	if err := os.WriteFile(source, []byte(image), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := h.api.Firmware.Add(testDevice, board.XiaoS3, source, "new"); err != nil {
+		t.Fatal(err)
+	}
+	// Paired again since, as the other board.
+	device, _ := h.store.Device(testDevice)
+	device.Board = board.IoTButtonC6
+	h.store.Put(testDevice, device)
+
+	body := fmt.Sprintf(`{"device":%q,"seq":1,"fw":"old"}`, testDevice)
+	signature, _ := Sign(testKey, []byte(body))
+	if _, answer := h.post(t, "/v1/update", body, signature); !strings.Contains(answer, `"status":"ok"`) {
+		t.Errorf("offered an S3 image to a C6: %s", answer)
 	}
 }

@@ -20,6 +20,8 @@ type Device struct {
 	Seq      uint64          `json:"seq"`
 	Response json.RawMessage `json:"response,omitempty"` // answer to Seq, for retries
 	Firmware string          `json:"firmware,omitempty"`
+	Board    string          `json:"board,omitempty"`      // as reported, see board.Of
+	Battery  int             `json:"battery_mv,omitempty"` // last reported, in mV
 	PairedAt time.Time       `json:"paired_at"`
 	LastSeen time.Time       `json:"last_seen,omitzero"`
 }

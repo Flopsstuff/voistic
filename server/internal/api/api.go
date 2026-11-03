@@ -21,6 +21,7 @@ import (
 	"slices"
 	"time"
 
+	"voistic/server/internal/board"
 	"voistic/server/internal/config"
 	"voistic/server/internal/firmware"
 	"voistic/server/internal/pairing"
@@ -51,16 +52,42 @@ type pressRequest struct {
 	Seq     uint64 `json:"seq"`
 	FW      string `json:"fw"`
 	RSSI    int    `json:"rssi"` // Wi-Fi signal at the button in dBm, for the log
+	Board   string `json:"board"`
+	Battery int    `json:"battery_mv"` // 0 where the board can't measure it
+}
+
+// remember keeps what a button says about itself.
+func (req pressRequest) remember(device *store.Device) {
+	device.Firmware = req.FW
+	if req.Board != "" {
+		device.Board = req.Board
+	}
+	if req.Battery > 0 {
+		device.Battery = req.Battery
+	}
+	device.LastSeen = time.Now()
 }
 
 type pressResponse struct {
 	Status string `json:"status"`
-	Seq    uint64 `json:"seq"`
+	Awake  int    `json:"awake_s,omitempty"` // how long to stay connected afterwards
+	Seq    uint64 `json:"seq"`               // last, the firmware looks for it at the end
+}
+
+// awakeSeconds is how long device stays connected after this answer, or 0 when
+// the config can't be read, which leaves it to the button.
+func (s *Server) awakeSeconds(device string) int {
+	cfg, err := s.Config()
+	if err != nil {
+		return 0
+	}
+	return int(cfg.AwakeFor(device).Seconds())
 }
 
 type pairRequest struct {
 	Device string `json:"device"`
 	FW     string `json:"fw"`
+	Board  string `json:"board"`
 }
 
 type pairResponse struct {
@@ -156,7 +183,7 @@ func (s *Server) press(w http.ResponseWriter, r *http.Request) {
 	}
 
 	action, status := s.resolve(req)
-	response, err := json.Marshal(pressResponse{Status: status, Seq: req.Seq})
+	response, err := json.Marshal(pressResponse{Status: status, Awake: s.awakeSeconds(req.Device), Seq: req.Seq})
 	if err != nil {
 		http.Error(w, "encode", http.StatusInternalServerError)
 		return
@@ -166,15 +193,18 @@ func (s *Server) press(w http.ResponseWriter, r *http.Request) {
 	// one twice.
 	device.Seq = req.Seq
 	device.Response = response
-	device.Firmware = req.FW
-	device.LastSeen = time.Now()
+	req.remember(&device)
 	if err := s.Store.Put(req.Device, device); err != nil {
 		s.Log.Error("can't save state", "device", req.Device, "err", err)
 		http.Error(w, "can't save state", http.StatusInternalServerError)
 		return
 	}
 
-	s.Log.Info("press", "device", req.Device, "gesture", req.Gesture, "seq", req.Seq, "status", status, "rssi", req.RSSI)
+	attrs := []any{"device", req.Device, "gesture", req.Gesture, "seq", req.Seq, "status", status, "rssi", req.RSSI}
+	if req.Battery > 0 {
+		attrs = append(attrs, "battery_mv", req.Battery)
+	}
+	s.Log.Info("press", attrs...)
 	if status == StatusOK {
 		s.Dispatch(req.Device, req.Gesture, action)
 	}
@@ -222,13 +252,13 @@ func (s *Server) pair(w http.ResponseWriter, r *http.Request) {
 
 	// A re-paired device starts counting from zero again, so it gets a new
 	// record rather than an update.
-	device := store.Device{Key: key, Firmware: req.FW, PairedAt: time.Now()}
+	device := store.Device{Key: key, Firmware: req.FW, Board: req.Board, PairedAt: time.Now()}
 	if err := s.Store.Put(req.Device, device); err != nil {
 		s.Log.Error("can't save state", "device", req.Device, "err", err)
 		http.Error(w, "can't save state", http.StatusInternalServerError)
 		return
 	}
-	s.Log.Info("paired", "device", req.Device, "from", r.RemoteAddr)
+	s.Log.Info("paired", "device", req.Device, "board", board.Of(req.Board), "fw", req.FW, "from", r.RemoteAddr)
 	writeJSON(w, pairResponse{Key: key})
 }
 

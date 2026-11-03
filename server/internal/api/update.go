@@ -8,6 +8,8 @@ import (
 	"net/http"
 	"strconv"
 	"time"
+
+	"voistic/server/internal/board"
 )
 
 // firmwareSendTime is how long a button gets to fetch an image.
@@ -45,7 +47,15 @@ func (s *Server) update(w http.ResponseWriter, r *http.Request) {
 	}
 
 	answer := updateResponse{Status: StatusOK, Seq: req.Seq}
-	if info, ok := s.Firmware.Get(req.Device); ok && info.Version != req.FW {
+	info, ok := s.Firmware.Get(req.Device)
+	if ok && info.Board != "" && info.Board != board.Of(device.Board) {
+		// Checked when it was added, but the device may have been paired again
+		// as another board since.
+		s.Log.Error("not offering an image for another board", "device", req.Device,
+			"image", info.Board, "device_board", board.Of(device.Board))
+		ok = false
+	}
+	if ok && info.Version != req.FW {
 		answer.Status = StatusUpdate
 		answer.Version = info.Version
 		answer.Size = info.Size
@@ -59,8 +69,7 @@ func (s *Server) update(w http.ResponseWriter, r *http.Request) {
 
 	device.Seq = req.Seq
 	device.Response = response
-	device.Firmware = req.FW
-	device.LastSeen = time.Now()
+	req.remember(&device)
 	if err := s.Store.Put(req.Device, device); err != nil {
 		s.Log.Error("can't save state", "device", req.Device, "err", err)
 		http.Error(w, "can't save state", http.StatusInternalServerError)
