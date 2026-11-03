@@ -1,6 +1,7 @@
-// The SPH0645 microphone of a button built with VOISTIC_MIC. It captures from the
-// moment the board wakes into a buffer in PSRAM, so the start of a sentence isn't
-// lost while the network comes up.
+// The microphone of a button built with VOISTIC_MIC: an SPH0645 on I²S on the
+// XIAO (mic.cpp), or an analog SEN0487 on the ADC of the IoT Button V2
+// (mic_adc.cpp). It captures from the moment the board wakes into a buffer, so
+// the start of a sentence isn't lost while the network comes up.
 
 #pragma once
 
@@ -9,7 +10,7 @@
 
 constexpr uint32_t kMicRate = 16000;  // 16-bit mono, what speech recognition wants
 
-// Starts capturing. Later calls do nothing.
+// Starts capturing. Calls while capturing do nothing.
 void micStart();
 
 // Takes up to maxBytes of captured audio, oldest first, and returns how much.

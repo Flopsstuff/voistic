@@ -13,17 +13,36 @@ constexpr uint32_t kCachedJoinMs = 3000;
 RTC_DATA_ATTR int32_t cachedChannel = 0;
 RTC_DATA_ATTR uint8_t cachedBssid[6] = {};
 
+// An access point that still counts the board as connected, after a crash or a
+// reflash, refuses the first association, and the driver then gives up. A
+// second try a moment later gets in.
+constexpr uint32_t kRetryAfterMs = 1000;
+constexpr int kMaxRetries = 3;
+
 wifi_config_t stored = {};
 uint32_t startedAtMs = 0;
 bool usingCache = false;
 bool saved = false;
+volatile bool dropped = false;
+uint32_t droppedAtMs = 0;
+int retries = 0;
 
 const char* ssid() { return reinterpret_cast<const char*>(stored.sta.ssid); }
 const char* password() { return reinterpret_cast<const char*>(stored.sta.password); }
 
+void onDisconnected(WiFiEvent_t, WiFiEventInfo_t) {
+  droppedAtMs = millis();
+  dropped = true;
+}
+
 }  // namespace
 
 bool linkStart() {
+  static bool listening = false;
+  if (!listening) {
+    listening = true;
+    WiFi.onEvent(onDisconnected, ARDUINO_EVENT_WIFI_STA_DISCONNECTED);
+  }
   // Modem sleep saves nothing on a board that's awake for seconds, and it delays
   // the join: medians of 300 ms without it against 550 ms with it.
   WiFi.setSleep(false);
@@ -66,10 +85,18 @@ bool linkPoll(uint32_t nowMs) {
       saved = true;
       cachedChannel = WiFi.channel();
       memcpy(cachedBssid, WiFi.BSSID(), sizeof(cachedBssid));
-      Serial.printf("wifi: connected in %lu ms, rssi %d\n",
-                    static_cast<unsigned long>(nowMs - startedAtMs), WiFi.RSSI());
+      Serial.printf("wifi: connected in %lu ms, at %lu ms, rssi %d\n",
+                    static_cast<unsigned long>(nowMs - startedAtMs), static_cast<unsigned long>(nowMs), WiFi.RSSI());
     }
     return true;
+  }
+
+  if (dropped && !usingCache && retries < kMaxRetries && nowMs - droppedAtMs >= kRetryAfterMs) {
+    dropped = false;
+    ++retries;
+    Serial.printf("wifi: dropped, trying again (%d)\n", retries);
+    WiFi.begin(ssid(), password());
+    return false;
   }
 
   if (usingCache && nowMs - startedAtMs >= kCachedJoinMs) {

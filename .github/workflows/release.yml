@@ -30,16 +30,17 @@ jobs:
       - uses: actions/cache@v6
         with:
           path: ~/.platformio
-          key: platformio-${{ hashFiles('platformio.ini') }}
+          key: platformio-${{ hashFiles('platformio.ini', 'sdkconfig.c6.defaults') }}
       - run: pip install platformio
 
       - name: Build the server
         run: make -C server dist VERSION="$GITHUB_REF_NAME"
       - name: Build the firmware
         run: |
-          pio run -e usb -e mic
-          cp .pio/build/usb/firmware.bin server/dist/firmware-usb.bin
-          cp .pio/build/mic/firmware.bin server/dist/firmware-mic.bin
+          pio run -e usb -e mic -e c6
+          cp .pio/build/usb/firmware.bin server/dist/firmware-xiao-s3.bin
+          cp .pio/build/mic/firmware.bin server/dist/firmware-xiao-s3-mic.bin
+          cp .pio/build/c6/firmware.bin server/dist/firmware-iot-button-c6.bin
       - name: Sum the files
         working-directory: server/dist
         run: sha256sum -- * > SHA256SUMS

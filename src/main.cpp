@@ -1,15 +1,23 @@
-// Wi-Fi button on a XIAO ESP32S3 Plus with an IoT Button with NeoPixel BFF.
+// Wi-Fi button on a XIAO ESP32S3 Plus with an IoT Button with NeoPixel BFF, or
+// on a Seeed IoT Button V2, see board.h.
 //
 // The board sleeps until pressed. It recognises the gesture, sends it to the
 // paired server, shows the outcome and goes back to sleep. What a gesture does
 // is configured on the server. See gesture.h for the gestures and leds.cpp for
 // what each colour means.
+//
+// A board that stays connected (board.h) runs each press in its own task
+// instead, which finish() ends, and loop() waits for the next press in light
+// sleep with Wi-Fi up, then deep-sleeps after the time the server asked for.
 
 #include <Arduino.h>
 #include <WiFi.h>
-#include <driver/rtc_io.h>
 #include <esp_ota_ops.h>
+#ifdef VOISTIC_BOARD_C6
+#include <hal/gpio_ll.h>
+#endif
 
+#include "board.h"
 #include "client.h"
 #include "gesture.h"
 #include "leds.h"
@@ -23,10 +31,7 @@ extern "C" bool verifyRollbackLater() { return true; }
 
 namespace {
 
-constexpr uint8_t kButtonPin = A2;  // GPIO3, shorts to GND when pressed
-constexpr uint8_t kLedPin = LED_BUILTIN;  // GPIO21, active low
-constexpr gpio_num_t kButtonGpio = GPIO_NUM_3;
-constexpr gpio_num_t kPixelGpio = GPIO_NUM_4;
+constexpr gpio_num_t kButtonGpio = static_cast<gpio_num_t>(kButtonPin);
 
 constexpr uint32_t kAwakeLimitMs = 15000;
 constexpr uint32_t kIdleAfterResetMs = 10000;  // room for a USB reflash or a hold
@@ -50,6 +55,9 @@ size_t edgeTail = 0;
 
 GestureDetector* detector = nullptr;
 bool wokenByPress = false;
+uint32_t cycleStartMs = 0;  // when this press began, the boot or a wake from waiting
+bool cycleOnTask = false;   // each press runs in its own task, see loop()
+TaskHandle_t supervisor = nullptr;
 bool linkStarted = false;
 bool networkSaved = false;
 bool warmedUp = false;
@@ -78,32 +86,41 @@ void readButton() {
 }
 
 [[noreturn]] void sleepNow() {
-  Serial.println("sleep");
+  // The boot's own line goes out before a USB port is open, so it's repeated here.
+  Serial.printf("sleep, after a boot with reset %d, wake cause %d\n", esp_reset_reason(),
+                esp_sleep_get_wakeup_cause());
   detachInterrupt(digitalPinToInterrupt(kButtonPin));
   ledsStop();
-  digitalWrite(kLedPin, HIGH);
+  boardSleep();
+}
 
-  rtc_gpio_pullup_en(kButtonGpio);
-  rtc_gpio_pulldown_dis(kButtonGpio);
-
-  // Keeps the data line from floating, which could light the pixel during sleep.
-  rtc_gpio_init(kPixelGpio);
-  rtc_gpio_pullup_dis(kPixelGpio);
-  rtc_gpio_pulldown_en(kPixelGpio);
-
-  esp_sleep_enable_ext0_wakeup(kButtonGpio, 0);
-  esp_deep_sleep_start();
+// Whether this press can end by waiting connected for the next one.
+bool canStayConnected() {
+  return cycleOnTask && clientIsPaired() && WiFi.status() == WL_CONNECTED;
 }
 
 // Shows the final state, then sleeps once the button is up, since a held button
-// would wake the board again at once.
+// would wake the board again at once. A low battery adds its warning. Where the
+// board stays connected, it ends this press's task instead.
 [[noreturn]] void finish(Led outcome) {
   ledsSet(outcome);
-  WiFi.disconnect(/*wifioff=*/true);  // the fade doesn't need the radio
+  const bool stay = canStayConnected();
+  if (!stay) {
+    WiFi.disconnect(/*wifioff=*/true);  // the fade doesn't need the radio
+  }
   ledsWait();
+  const int battery = boardBatteryMv();
+  if (battery > 0 && battery < kBatteryLowMv) {
+    ledsSet(Led::BatteryLow);
+    ledsWait();
+  }
   ledsSet(Led::Off);
   while (buttonDown()) {
     delay(10);
+  }
+  if (stay) {
+    xTaskNotifyGive(supervisor);
+    vTaskDelete(nullptr);
   }
   sleepNow();
 }
@@ -236,8 +253,10 @@ bool firmwareOnProbation() {
 
 [[noreturn]] void sendPending(const char* gesture) {
   ledsSet(pendingLook, /*half=*/true);
-  Serial.printf("gesture: %s\n", gesture);
-  finish(clientSendPress(gesture) == SendResult::Accepted ? Led::Accepted : Led::Failed);
+  Serial.printf("gesture: %s at %lu ms\n", gesture, millis());
+  const SendResult result = clientSendPress(gesture);
+  Serial.printf("press: answered at %lu ms\n", millis());
+  finish(result == SendResult::Accepted ? Led::Accepted : Led::Failed);
 }
 
 #ifdef VOISTIC_MIC
@@ -339,34 +358,14 @@ void showProgress(uint32_t now) {
 
 }  // namespace
 
-void setup() {
-  const uint32_t startupMs = millis();
+namespace {
 
-  pinMode(kButtonPin, INPUT_PULLUP);
-  const bool downAtStartup = buttonDown();
-  attachInterrupt(digitalPinToInterrupt(kButtonPin), onButtonEdge, CHANGE);
-
-  wokenByPress = esp_sleep_get_wakeup_cause() == ESP_SLEEP_WAKEUP_EXT0;
-  detector = new GestureDetector(downAtStartup, wokenByPress, startupMs);
-
-  Serial.begin(115200);
-  // Short, so a closed port only costs a few ms per write. Never 0: HWCDC::write
-  // counts retries down from this value, so 0 wraps around and hangs the loop
-  // once the TX buffer fills.
-  Serial.setTxTimeoutMs(10);
-
-  pinMode(kLedPin, OUTPUT);
-  digitalWrite(kLedPin, HIGH);
-  ledsBegin();
-  clientRestoreBrightness();
-
-  Serial.printf("boot: %s %s, fw %s, wake %d, paired %d\n", __DATE__, __TIME__, FW_VERSION,
-                wokenByPress, clientIsPaired());
-
+// The rest of the first press, after the boot.
+void beginFirstCycle() {
+  cycleStartMs = millis();
   if (firmwareOnProbation()) {
     confirmFirmware();
   }
-
   if (wokenByPress) {
     startLink();  // already on its way by the time the gesture is known
 #ifdef VOISTIC_MIC
@@ -375,7 +374,22 @@ void setup() {
   }
 }
 
-void loop() {
+// A press that woke the board from waiting connected.
+void beginNextCycle() {
+  cycleStartMs = millis();
+  wokenByPress = true;
+  pendingGesture = nullptr;
+  pendingLook = Led::Off;
+  warmedUp = false;  // the server's address may have dropped out of the ARP cache
+  edgeTail = edgeHead;
+  delete detector;
+  detector = new GestureDetector(buttonDown(), /*wokenByPress=*/true, cycleStartMs);
+#ifdef VOISTIC_MIC
+  micStart();
+#endif
+}
+
+void runCycle() {
   const uint32_t now = millis();
   readButton();
   pollSerial();
@@ -426,14 +440,137 @@ void loop() {
 #endif
 
   if (!detector->isDown()) {
-    if (now >= kAwakeLimitMs) {
+    const uint32_t elapsed = now - cycleStartMs;
+    if (elapsed >= kAwakeLimitMs) {
       finish(pendingGesture != nullptr ? Led::Failed : Led::Off);
     }
-    if (!wokenByPress && pendingGesture == nullptr && now >= kIdleAfterResetMs) {
+    if (!wokenByPress && pendingGesture == nullptr && elapsed >= kIdleAfterResetMs) {
       finish(Led::Off);
     }
   }
 
   showProgress(now);
   delay(1);
+}
+
+void cycleTask(void* first) {
+  if (first != nullptr) {
+    beginFirstCycle();
+  } else {
+    beginNextCycle();
+  }
+  for (;;) {
+    runCycle();
+  }
+}
+
+void startCycleTask(bool first) {
+  // As much stack as Arduino gives loop().
+  xTaskCreate(cycleTask, "press", 8192, first ? &supervisor : nullptr, 1, nullptr);
+}
+
+#ifdef VOISTIC_BOARD_C6
+TaskHandle_t waiter = nullptr;
+
+// Level-triggered, so it wakes the chip from light sleep, and switched off at
+// once, or it would fire for as long as the button is down.
+void IRAM_ATTR onWaitingPress() {
+  gpio_ll_intr_disable(&GPIO, kButtonGpio);
+  BaseType_t woken = pdFALSE;
+  vTaskNotifyGiveFromISR(waiter, &woken);
+  portYIELD_FROM_ISR(woken);
+}
+
+// Waits for a press in light sleep, with Wi-Fi in power save but connected.
+// Returns false when the time runs out or the network goes.
+bool waitConnected(uint32_t limitMs) {
+#ifdef VOISTIC_MIC
+  micStop();
+#endif
+  ledsStop();
+  WiFi.setSleep(true);
+  waiter = xTaskGetCurrentTaskHandle();
+  detachInterrupt(digitalPinToInterrupt(kButtonPin));
+  ulTaskNotifyTake(pdTRUE, 0);  // nothing left over from before
+  attachInterrupt(digitalPinToInterrupt(kButtonPin), onWaitingPress, ONLOW_WE);
+  esp_sleep_enable_gpio_wakeup();
+  Serial.printf("wait: connected, up to %lu s\n", static_cast<unsigned long>(limitMs / 1000));
+  boardAllowLightSleep(true);
+
+  const uint32_t start = millis();
+  bool pressed = false;
+  while (millis() - start < limitMs) {
+    if (buttonDown()) {
+      pressed = true;
+      break;
+    }
+    if (WiFi.status() != WL_CONNECTED) {
+      break;
+    }
+    ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(5000));
+  }
+
+  boardAllowLightSleep(false);
+  detachInterrupt(digitalPinToInterrupt(kButtonPin));
+  attachInterrupt(digitalPinToInterrupt(kButtonPin), onButtonEdge, CHANGE);
+  WiFi.setSleep(false);
+  ledsBegin();
+  Serial.printf("wait: %s after %lu s\n",
+                pressed ? "pressed" : (WiFi.status() == WL_CONNECTED ? "time is up" : "Wi-Fi lost"),
+                static_cast<unsigned long>((millis() - start) / 1000));
+  if (pressed) {
+    boardMeasureBattery();
+  }
+  return pressed;
+}
+#endif
+
+}  // namespace
+
+void setup() {
+  const uint32_t startupMs = millis();
+  pinMode(kButtonPin, INPUT_PULLUP);
+  const bool downAtStartup = buttonDown();
+  attachInterrupt(digitalPinToInterrupt(kButtonPin), onButtonEdge, CHANGE);
+  wokenByPress = boardWokenByButton();
+
+  Serial.begin(115200);
+  // Short, so a closed port only costs a few ms per write. Never 0: HWCDC::write
+  // counts retries down from this value, so 0 wraps around and hangs the loop
+  // once the TX buffer fills.
+  Serial.setTxTimeoutMs(10);
+
+  boardBegin();
+  ledsBegin();
+  clientRestoreBrightness();
+
+  Serial.printf("boot: %s %s, %s, fw %s, wake %d, paired %d, battery %d mV\n", __DATE__, __TIME__,
+                VOISTIC_BOARD, FW_VERSION, wokenByPress, clientIsPaired(), boardBatteryMv());
+
+  // The level read before anything slow, so a short press isn't missed.
+  detector = new GestureDetector(downAtStartup, wokenByPress, startupMs);
+  supervisor = xTaskGetCurrentTaskHandle();
+  cycleOnTask = kBoardStaysConnected;
+  if (cycleOnTask) {
+    startCycleTask(/*first=*/true);
+  } else {
+    beginFirstCycle();
+  }
+}
+
+void loop() {
+  if (!cycleOnTask) {
+    runCycle();
+    return;
+  }
+#ifdef VOISTIC_BOARD_C6
+  ulTaskNotifyTake(pdTRUE, portMAX_DELAY);  // the press's task has ended
+  const int seconds = clientAwakeSeconds();
+  const uint32_t limitMs = seconds >= 0 ? seconds * 1000UL : kDefaultStayConnectedMs;
+  if (limitMs == 0 || !waitConnected(limitMs)) {
+    WiFi.disconnect(/*wifioff=*/true);
+    sleepNow();
+  }
+  startCycleTask(/*first=*/false);
+#endif
 }

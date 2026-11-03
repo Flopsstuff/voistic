@@ -1,16 +1,15 @@
-#ifdef VOISTIC_MIC
+#if defined(VOISTIC_MIC) && !defined(VOISTIC_BOARD_C6)
 
 #include "mic.h"
 
 #include <Arduino.h>
-#include <driver/i2s.h>
+#include <driver/i2s_std.h>
 
 namespace {
 
-constexpr i2s_port_t kPort = I2S_NUM_0;
-constexpr int kBclkPin = 44;  // D7
-constexpr int kLrclPin = 8;   // D9
-constexpr int kDataPin = 7;   // D8
+constexpr gpio_num_t kBclkPin = GPIO_NUM_44;  // D7
+constexpr gpio_num_t kLrclPin = GPIO_NUM_8;   // D9
+constexpr gpio_num_t kDataPin = GPIO_NUM_7;   // D8
 
 // The SPH0645 doesn't run below 32 kHz, so it's halved to kMicRate here.
 constexpr uint32_t kCaptureRate = kMicRate * 2;
@@ -29,6 +28,7 @@ constexpr float kGain = 2.0f;  // from 18-bit values to 16-bit, which is +18 dB
 constexpr uint32_t kDropSamples = kMicRate / 10;   // 0.1 s
 constexpr uint32_t kFadeSamples = kMicRate / 5;    // 0.2 s
 
+i2s_chan_handle_t channel = nullptr;
 uint8_t* buffer = nullptr;
 volatile size_t written = 0;  // total bytes, the position is modulo kBufferBytes
 volatile size_t taken = 0;
@@ -51,7 +51,7 @@ void capture(void*) {
 
   while (capturing) {
     size_t got = 0;
-    i2s_read(kPort, frames, sizeof(frames), &got, pdMS_TO_TICKS(100));
+    i2s_channel_read(channel, frames, sizeof(frames), &got, 100);
     for (size_t i = 0; i + 1 < got / sizeof(int32_t); i += 2) {
       const float input = static_cast<float>(frames[i] >> kDataShift);
       if (first) {
@@ -76,7 +76,9 @@ void capture(void*) {
       odd = !odd;
     }
   }
-  i2s_driver_uninstall(kPort);
+  i2s_channel_disable(channel);
+  i2s_del_channel(channel);
+  channel = nullptr;
   vTaskDelete(nullptr);
 }
 
@@ -93,24 +95,24 @@ void micStart() {
     return;
   }
 
-  i2s_config_t config = {};
-  config.mode = static_cast<i2s_mode_t>(I2S_MODE_MASTER | I2S_MODE_RX);
-  config.sample_rate = kCaptureRate;
-  config.bits_per_sample = I2S_BITS_PER_SAMPLE_32BIT;
-  config.channel_format = I2S_CHANNEL_FMT_RIGHT_LEFT;  // SEL is on GND, so left
-  config.communication_format = I2S_COMM_FORMAT_STAND_I2S;
-  config.dma_buf_count = kDmaBuffers;
-  config.dma_buf_len = kDmaFrames;
+  i2s_chan_config_t chan = I2S_CHANNEL_DEFAULT_CONFIG(I2S_NUM_0, I2S_ROLE_MASTER);
+  chan.dma_desc_num = kDmaBuffers;
+  chan.dma_frame_num = kDmaFrames;
 
-  i2s_pin_config_t pins = {};
-  pins.mck_io_num = I2S_PIN_NO_CHANGE;
-  pins.bck_io_num = kBclkPin;
-  pins.ws_io_num = kLrclPin;
-  pins.data_out_num = I2S_PIN_NO_CHANGE;
-  pins.data_in_num = kDataPin;
+  // Both slots, 32 bits each, as the legacy driver read them: the SPH0645 is on
+  // the left (SEL on GND), and capture() takes every first of a pair.
+  i2s_std_config_t config = {};
+  config.clk_cfg = I2S_STD_CLK_DEFAULT_CONFIG(kCaptureRate);
+  config.slot_cfg = I2S_STD_PHILIPS_SLOT_DEFAULT_CONFIG(I2S_DATA_BIT_WIDTH_32BIT, I2S_SLOT_MODE_STEREO);
+  config.gpio_cfg.mclk = I2S_GPIO_UNUSED;
+  config.gpio_cfg.bclk = kBclkPin;
+  config.gpio_cfg.ws = kLrclPin;
+  config.gpio_cfg.dout = I2S_GPIO_UNUSED;
+  config.gpio_cfg.din = kDataPin;
 
-  if (i2s_driver_install(kPort, &config, 0, nullptr) != ESP_OK ||
-      i2s_set_pin(kPort, &pins) != ESP_OK) {
+  if (i2s_new_channel(&chan, nullptr, &channel) != ESP_OK ||
+      i2s_channel_init_std_mode(channel, &config) != ESP_OK ||
+      i2s_channel_enable(channel) != ESP_OK) {
     Serial.println("mic: i2s failed");
     return;
   }

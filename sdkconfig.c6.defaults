@@ -1,0 +1,13 @@
+# ESP-IDF settings for env:c6, on top of Arduino's own. See platformio.ini.
+
+# Light sleep that keeps Wi-Fi connected between presses.
+CONFIG_PM_ENABLE=y
+CONFIG_FREERTOS_USE_TICKLESS_IDLE=y
+# No light sleep while on USB, which keeps the port for flashing and logs.
+CONFIG_USJ_NO_AUTO_LS_ON_CONNECTION=y
+
+# DHCP as on the XIAO's Arduino 2: no second-long check of the address (one
+# choice of three in ESP-IDF 5), and the last one asked for again.
+# CONFIG_LWIP_DHCP_DOES_ARP_CHECK is not set
+CONFIG_LWIP_DHCP_DOES_NOT_CHECK_OFFERED_IP=y
+CONFIG_LWIP_DHCP_RESTORE_LAST_IP=y

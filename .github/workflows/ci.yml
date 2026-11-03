@@ -42,7 +42,8 @@ jobs:
       - uses: actions/cache@v6
         with:
           path: ~/.platformio
-          key: platformio-${{ hashFiles('platformio.ini') }}
+          key: platformio-${{ hashFiles('platformio.ini', 'sdkconfig.c6.defaults') }}
       - run: pip install platformio
       - run: pio test -e native
-      - run: pio run -e usb -e mic
+      # c6 rebuilds ESP-IDF, minutes the first time, then cached with ~/.platformio
+      - run: pio run -e usb -e mic -e c6

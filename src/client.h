@@ -57,6 +57,10 @@ SendResult clientAudioEnd();
 // for up to timeoutMs.
 bool clientPair(uint32_t timeoutMs, bool (*cancelled)());
 
+// How long the server wants this button to stay connected after a press, from
+// the last verified answer, or -1 if none said.
+int clientAwakeSeconds();
+
 // Gives up the key before pairing again. The key stays if the server can't be
 // reached, so a failed attempt doesn't cost a working button.
 void clientRelease();

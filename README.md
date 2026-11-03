@@ -6,7 +6,7 @@
 
 A physical Wi-Fi button that talks to your computer. Hold it and speak: the audio streams to a server on your LAN, gets transcribed and is typed into the active window. Short presses run whatever you bind to them, such as Enter or Tab.
 
-The button is an ESP32-S3 on a small LiPo. It sleeps between presses, wakes on the button, does its job and goes back to sleep. The server is a single Go binary for macOS, Windows and Linux.
+The button is an ESP32-S3 on a small LiPo. It sleeps between presses, wakes on the button, does its job and goes back to sleep. A second build runs on a ready-made Seeed IoT Button V2, an ESP32-C6 on an 18650, which stays connected between presses, so they arrive almost at once. The server is a single Go binary for macOS, Windows and Linux.
 
 [Watch a short video](docs/images/vid.mp4) of the button typing a message by voice.
 
@@ -48,7 +48,7 @@ The blink is at full brightness while the button is down and at half when it's u
 
 ## Setup
 
-You need a [Groq API key](https://console.groq.com). [Releases](https://github.com/Flopsstuff/voistic/releases/latest) have the server for each system and the firmware. To build them yourself you need Go and [PlatformIO](https://platformio.org). The hardware is described in [docs/hardware.md](docs/hardware.md).
+You need a [Groq API key](https://console.groq.com). [Releases](https://github.com/Flopsstuff/voistic/releases/latest) have the server for each system and the firmware. To build them yourself you need Go and [PlatformIO](https://platformio.org). The hardware is described in [docs/hardware.md](docs/hardware.md), and the IoT Button V2 in [docs/iot-button-c6.md](docs/iot-button-c6.md).
 
 ### Server
 
@@ -77,6 +77,7 @@ groq:
 devices:
   voistic-9af4:                   # the button's id, voistic- and the end of its MAC
     name: Button with a microphone
+    # deep_sleep_after: 30m        # IoT Button V2 only: how long it stays connected after a press
     gestures:
       single:
         key: enter
@@ -114,7 +115,7 @@ A window running as administrator can't be pasted into, since Windows blocks inp
 pio run -e mic -t upload --upload-port /dev/cu.usbmodem14301
 ```
 
-The port only exists while the board is awake, so hold the button while it flashes. Use the default `usb` environment for a button with no microphone.
+The port only exists while the board is awake, so hold the button while it flashes. Use the default `usb` environment for a button with no microphone, and `c6` for the IoT Button V2. Its first build compiles ESP-IDF with power management and takes a few minutes.
 
 Tell the button your Wi-Fi network over USB within 10 s of a reset, as a serial line:
 
@@ -142,7 +143,7 @@ To pair a button, run `voistic pair` on the computer it should belong to, and wi
 voistic serve [--log <file>]     run the server
 voistic install | uninstall      run the server at login, or stop that, on macOS and Windows
 voistic check                    validate the config
-voistic devices                  list paired buttons
+voistic devices                  list paired buttons, with their board and battery
 voistic pair                     accept one button
 voistic forget <device>          drop a button's key
 voistic test <device> <gesture>  run an action without the button
@@ -163,7 +164,7 @@ tools/publish-firmware.sh mic voistic-9af4
 
 This builds it and puts it on the server. Then press the button 5 times: it downloads the firmware, checks its hash and restarts. A new firmware has to reach the server on its first boot, or the bootloader goes back to the previous one.
 
-A firmware from a release goes the same way, once you've run `voistic firmware voistic-9af4 firmware-mic.bin v0.1.0`, with the release's tag as the version.
+A firmware from a release goes the same way, once you've run `voistic firmware voistic-9af4 firmware-xiao-s3-mic.bin v0.2.0`, with the release's tag as the version. Release images are named after the board, `firmware-xiao-s3.bin`, `firmware-xiao-s3-mic.bin` and `firmware-iot-button-c6.bin`, and the server refuses an image for another chip than the button's.
 
 ## Security
 

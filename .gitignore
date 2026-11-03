@@ -3,3 +3,9 @@ server/bin/
 server/dist/
 recordings/
 .DS_Store
+/sdkconfig.c6
+/sdkconfig.defaults
+/.dummy/
+/managed_components/
+/dependencies.lock
+/research/*/recordings/

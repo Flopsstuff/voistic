@@ -2,6 +2,8 @@
 
 The button with a microphone, board `voistic-9af4`. It sleeps, wakes on a press and, while held, records the voice and streams it to a server on the LAN. Build the firmware with `pio run -e mic`.
 
+There's a second build on a ready-made board, the Seeed IoT Button V2, described in [iot-button-c6.md](iot-button-c6.md).
+
 This page follows the build from loose parts to the printed case. There's also [a short video](images/vid.mp4) of it at work.
 
 ## Parts
@@ -17,7 +19,7 @@ Here they are before assembly, with the XIAO's antenna on the right.
 
 ![The parts laid out on a cutting mat: the XIAO with its antenna, the microphone, the button board and the battery](images/0.jpg)
 
-PlatformIO has no board definition for the Plus, so the project uses `seeed_xiao_esp32s3` with the flash size overridden.
+The firmware builds for it as `seeed_xiao_esp32_s3_plus` on pioarduino's platform, with Arduino core 3.
 
 ## Wiring
 

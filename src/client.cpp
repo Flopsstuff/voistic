@@ -1,4 +1,5 @@
 #include "client.h"
+#include "board.h"
 #include "leds.h"
 
 #include <ESPmDNS.h>
@@ -23,6 +24,15 @@ constexpr char kBrightnessKey[] = "brightness";
 
 constexpr char kSignatureHeader[] = "X-Voistic-Sig";
 constexpr int kKeyBytes = 32;
+
+// What a button tells the server about itself with every signed request.
+String about() {
+  String fields = ",\"board\":\"" VOISTIC_BOARD "\"";
+  if (boardBatteryMv() > 0) {
+    fields += ",\"battery_mv\":" + String(boardBatteryMv());
+  }
+  return fields;
+}
 constexpr int kSendAttempts = 3;
 constexpr uint32_t kConnectTimeoutMs = 1500;
 constexpr uint16_t kReadTimeoutMs = 2000;
@@ -43,6 +53,8 @@ struct ServerAddress {
 };
 
 Preferences prefs;
+
+int awakeSeconds = -1;  // from the last answer, -1 until one says
 
 WiFiClient audioSocket;
 uint64_t audioSeq = 0;
@@ -187,6 +199,10 @@ bool parseAnswer(const String& body, uint64_t seq, const uint8_t* key,
     Serial.println("server: answer is for another press");
     return false;
   }
+  const int awake = body.indexOf("\"awake_s\":");
+  if (awake >= 0) {
+    awakeSeconds = body.substring(awake + 10).toInt();
+  }
   if (body.indexOf("\"status\":\"ok\"") >= 0) {
     result = SendResult::Accepted;
   } else if (body.indexOf("\"status\":\"unbound\"") >= 0) {
@@ -283,7 +299,7 @@ SendResult clientSendPress(const char* gesture) {
 
   const String body = "{\"device\":\"" + clientDeviceId() + "\",\"gesture\":\"" + gesture +
                       "\",\"seq\":" + String(seq) + ",\"fw\":\"" FW_VERSION "\",\"rssi\":" +
-                      String(WiFi.RSSI()) + "}";
+                      String(WiFi.RSSI()) + about() + "}";
   const String signature = sign(key, body);
 
   ServerAddress server;
@@ -332,7 +348,7 @@ UpdateCheck clientCheckUpdate(UpdateOffer& offer) {
   updateSeq = prefs.getULong64(kSeqKey, 0) + 1;
   prefs.putULong64(kSeqKey, updateSeq);
   const String body = "{\"device\":\"" + clientDeviceId() + "\",\"seq\":" + String(updateSeq) +
-                      ",\"fw\":\"" FW_VERSION "\",\"rssi\":" + String(WiFi.RSSI()) + "}";
+                      ",\"fw\":\"" FW_VERSION "\",\"rssi\":" + String(WiFi.RSSI()) + about() + "}";
   String response;
   String responseSignature;
   const int code = post(server, "/v1/update", body, sign(key, body), response, responseSignature);
@@ -454,7 +470,7 @@ SendResult clientAudioEnd() {
   if (audioSocket.print("0\r\n\r\n") != 5) {
     return SendResult::NoServer;
   }
-  audioSocket.setTimeout(kAudioAnswerSeconds);
+  audioSocket.setTimeout(kAudioAnswerSeconds * 1000);  // milliseconds since core 3
 
   const String status = audioSocket.readStringUntil('\n');
   Serial.printf("audio: %s\n", status.c_str());
@@ -499,7 +515,7 @@ SendResult clientAudioEnd() {
 
 bool clientPair(uint32_t timeoutMs, bool (*cancelled)()) {
   openPrefs();
-  const String body = "{\"device\":\"" + clientDeviceId() + "\",\"fw\":\"" FW_VERSION "\"}";
+  const String body = "{\"device\":\"" + clientDeviceId() + "\",\"fw\":\"" FW_VERSION "\",\"board\":\"" VOISTIC_BOARD "\"}";
 
   const uint32_t start = millis();
   while (millis() - start < timeoutMs) {
@@ -554,3 +570,5 @@ void clientForget() {
   tellServerUnpaired();
   prefs.clear();
 }
+
+int clientAwakeSeconds() { return awakeSeconds; }
