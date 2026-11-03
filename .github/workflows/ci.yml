@@ -44,6 +44,17 @@ jobs:
           path: ~/.platformio
           key: platformio-${{ hashFiles('platformio.ini', 'sdkconfig.c6.defaults') }}
       - run: pip install platformio
+      # The c6 build compiles ESP-IDF, then calls pioarduino's own copy of
+      # PlatformIO in ~/.platformio/penv. That one says 6.2.0.post1, which the
+      # platform counts as older than its minimum of 6.2.0, so it removes itself.
+      # Installing the platform creates that copy, and 6.2.0 replaces it.
+      - name: Pin the PlatformIO that the c6 build calls
+        run: |
+          pio pkg install -e c6
+          penv="$HOME/.platformio/penv/bin"
+          "$penv/uv" pip install --python "$penv/python" "platformio==6.2.0" ||
+            "$penv/python" -m pip install "platformio==6.2.0"
+          "$penv/pio" --version
       - run: pio test -e native
       # c6 rebuilds ESP-IDF, minutes the first time, then cached with ~/.platformio
       - run: pio run -e usb -e mic -e c6
