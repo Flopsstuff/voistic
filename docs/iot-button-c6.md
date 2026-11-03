@@ -2,6 +2,8 @@
 
 The second voistic button, board `voistic-25bc`, is a Seeed IoT Button V2 in its own case, with an analog microphone soldered to its test pads and an 18650 cell. Build the firmware with `pio run -e c6`.
 
+<img src="images/c6-hand.jpg" width="360" alt="The IoT Button V2 in a hand, held down, with its light glowing violet while it records">
+
 Unlike the XIAO button, it doesn't go into deep sleep after every press. It waits for the next one in light sleep with Wi-Fi connected, so a press reaches the server in tens of milliseconds, and it deep-sleeps after `deep_sleep_after` from the config, 30 minutes by default.
 
 The research that led here, with the diagnostic firmware and the tools, is in [`research/iot-button-c6`](../research/iot-button-c6).
@@ -12,7 +14,7 @@ The research that led here, with the diagnostic firmware and the tools, is in [`
 |---|---|
 | Seeed IoT Button V2, board v2.0 of 24/04/2025 | ESP32-C6FH4 with 4 MB flash and no PSRAM, button, RGB LED, red/blue LED, charger, battery switch |
 | DFRobot SEN0487 (Fermion MEMS microphone) | voice, analog, with its own amplifier |
-| 18650 cell | power |
+| 18650 cell, which came with the button | power |
 
 The [schematic](https://files.seeedstudio.com/wiki/IoT_Botton_ESPHOME/Seeed%20IoT%20Button-C6%20v2.0_SCH_250721.pdf) and the [KiCad sources](https://files.seeedstudio.com/wiki/IoT_Botton_ESPHOME/Seeed%20IoT%20Button-C6%20v2.0_SCH%26PCB_250721.zip) are on Seeed's wiki.
 
@@ -52,6 +54,14 @@ Pad 1 only rose to about 1.5 V when driven high, which the schematic doesn't exp
 | VCC | 5, GPIO7 | powered from the pin, so it's off in sleep |
 | GND | 4 | |
 | A | 3, GPIO6 | ADC1 channel 6, which isn't a strapping pin |
+
+Here the case is open and the microphone hangs on its three wires from the row of pads, before it went inside. The holder clips for the 18650 are at both ends.
+
+![The open IoT Button V2 seen from the back, with three wires from its test pads to the microphone module](images/c6-open.jpg)
+
+Inside, the module stands upright at the end of the case, next to the 18650, held in place with tape and facing the end wall. This photo also shows where its three wires are soldered.
+
+![The microphone module standing at the end of the open case, beside the blue 18650 cell](images/c6-inside.jpg)
 
 - The output idles at 1.50 V, mid-range for the ADC at 12 dB attenuation.
 - ADC1 runs in continuous mode at 64 kHz, and every 4 samples are summed into one at 16 kHz, 14 bits.

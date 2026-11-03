@@ -10,11 +10,20 @@ The button is an ESP32-S3 on a small LiPo. It sleeps between presses, wakes on t
 
 [Watch a short video](docs/images/vid.mp4) of the button typing a message by voice.
 
-![The parts before stacking: the XIAO board with its antenna, the microphone, the button board and the battery](docs/images/0.jpg)
+<table>
+<tr>
+<td><img src="docs/images/0.jpg" width="420" alt="The parts before stacking: the XIAO board with its antenna, the microphone, the button board and the battery"></td>
+<td><img src="docs/images/c6-open.jpg" width="420" alt="The open IoT Button V2 seen from the back, with three wires from its test pads to the microphone module"></td>
+</tr>
+</table>
 
-| | |
-|---|---|
-| ![The printed case in a hand, with the button and the microphone slit on its front](docs/images/7.jpg) | ![The case in a hand in front of this repository, with the pixel glowing through the slit](docs/images/8.jpg) |
+<table>
+<tr>
+<td><img src="docs/images/7.jpg" width="270" alt="The printed case in a hand, with the button and the microphone slit on its front"></td>
+<td><img src="docs/images/8.jpg" width="270" alt="The case in a hand in front of this repository, with the pixel glowing through the slit"></td>
+<td><img src="docs/images/c6-hand.jpg" width="270" alt="The IoT Button V2 in a hand, held down, with its light glowing violet while it records"></td>
+</tr>
+</table>
 
 ## How it works
 
