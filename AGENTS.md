@@ -7,6 +7,12 @@ A physical Wi-Fi remote. A battery-powered ESP32 button sleeps, wakes on a press
 
 See `README.md` for usage, `docs/hardware.md` for how the XIAO button is built and `docs/iot-button-c6.md` for the IoT Button V2.
 
+## Changelog
+
+Keep `CHANGELOG.md` up to date. Every change a user or a button owner would notice, a feature, a fix, a new command or config key, a change in what the button does, goes under `## Unreleased` at the top, in the same commit as the change, as a line or two in plain words about what it does for them, not how it's built. Refactors, tests and docs alone don't need a line.
+
+The version comes from the git tag, there's no version file. At a release, `## Unreleased` becomes `## vX.Y.Z, YYYY-MM-DD`, and the tag `vX.Y.Z` goes on that commit. Note there what an upgrade needs, if anything.
+
 ## Commands
 
 Firmware (PlatformIO, from the repo root):
