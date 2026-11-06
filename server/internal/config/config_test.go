@@ -186,3 +186,29 @@ devices:
 		t.Error("a negative stay_ready should be refused")
 	}
 }
+
+func TestGroqVocabulary(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.yaml")
+	write(t, path, `
+groq:
+  prompt: "Проект voistic: ESP32, XIAO."
+  replace:
+    войстик: voistic
+    "клод код": Claude Code
+`)
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Groq.Prompt != "Проект voistic: ESP32, XIAO." {
+		t.Errorf("prompt %q", cfg.Groq.Prompt)
+	}
+	if cfg.Groq.Replace["войстик"] != "voistic" || cfg.Groq.Replace["клод код"] != "Claude Code" {
+		t.Errorf("replace %v", cfg.Groq.Replace)
+	}
+
+	write(t, path, "groq:\n  replace:\n    \" \": x\n")
+	if _, err := Load(path); err == nil {
+		t.Error("an empty phrase should be refused")
+	}
+}

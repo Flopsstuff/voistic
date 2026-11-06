@@ -4,6 +4,17 @@ What changed in each release. The server and the firmware share a version,
 and every release has the server for each system and the firmware for each
 board, see [Releases](https://github.com/Flopsstuff/voistic/releases).
 
+## v0.3.1, 2026-11-06
+
+- `groq.prompt` in the config is sent with every transcription: the names,
+  terms and spellings to expect, up to Groq's 224 tokens. It guides the model,
+  it doesn't instruct it.
+- `groq.replace` swaps words and phrases in a transcript for how they should
+  be spelled, whole ones only and in any case, longer phrases first, after
+  `ignore`.
+- `voistic help` and `voistic usb help` end with the version and the
+  repository's address.
+
 ## v0.3.0, 2026-11-06
 
 ### A button on USB, from the server

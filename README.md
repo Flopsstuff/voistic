@@ -82,6 +82,9 @@ groq:
   language: en                    # leave out to let the API guess
   ignore:                         # phrases to cut, Whisper makes some up on silence
     - Thanks for watching
+  # prompt: "voistic, ESP32, XIAO, Claude Code" # words to expect and their spelling, up to 224 tokens
+  # replace:                      # whole words or phrases, in any case, spelled your way
+  #   "клод код": Claude Code
   # model: whisper-large-v3-turbo # defaults to whisper-large-v3
 devices:
   voistic-9af4:                   # the button's id, voistic- and the end of its MAC

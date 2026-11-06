@@ -65,7 +65,7 @@ func runUSB(p paths, client *control.Client, args []string) error {
 		command, rest = rest[0], rest[1:]
 	}
 	if command == "help" || command == "-h" || command == "--help" {
-		fmt.Print(usbUsage)
+		printHelp(os.Stdout, usbUsage)
 		return nil
 	}
 
@@ -137,7 +137,7 @@ func runUSB(p paths, client *control.Client, args []string) error {
 			return nil
 		}
 	default:
-		fmt.Fprint(os.Stderr, usbUsage)
+		printHelp(os.Stderr, usbUsage)
 		os.Exit(2)
 	}
 

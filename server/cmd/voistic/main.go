@@ -26,6 +26,7 @@ import (
 	"voistic/server/internal/pairing"
 	"voistic/server/internal/paste"
 	"voistic/server/internal/recording"
+	"voistic/server/internal/release"
 	"voistic/server/internal/service"
 	"voistic/server/internal/store"
 	"voistic/server/internal/stt"
@@ -72,6 +73,13 @@ Environment:
   VOISTIC_STATE   state directory (default ~/.local/state/voistic)
 `
 
+// printHelp prints a help text, then which voistic this is and where it
+// lives.
+func printHelp(w io.Writer, text string) {
+	fmt.Fprint(w, text)
+	fmt.Fprintf(w, "\nvoistic %s · https://github.com/%s\n", version, release.Repo)
+}
+
 const transcribeTimeout = 2 * time.Minute
 
 // version is set at build time.
@@ -86,7 +94,7 @@ func main() {
 
 func run(args []string) error {
 	if len(args) == 0 {
-		fmt.Fprint(os.Stderr, usage)
+		printHelp(os.Stderr, usage)
 		os.Exit(2)
 	}
 	paths, err := defaultPaths()
@@ -111,7 +119,7 @@ func run(args []string) error {
 	case command == "check" && len(args) == 1:
 		return check(paths)
 	case command == "help" || command == "-h" || command == "--help":
-		fmt.Print(usage)
+		printHelp(os.Stdout, usage)
 		return nil
 	case command == "usb":
 		return runUSB(paths, client, args[1:])
@@ -148,7 +156,7 @@ func run(args []string) error {
 	case command == "test" && len(args) == 3:
 		return test(client, args[1], args[2])
 	default:
-		fmt.Fprint(os.Stderr, usage)
+		printHelp(os.Stderr, usage)
 		os.Exit(2)
 	}
 	return nil
@@ -298,7 +306,14 @@ func transcriber(ctx context.Context, loader *config.Loader, log *slog.Logger) f
 }
 
 func speechClient(cfg *config.Config) stt.Client {
-	return stt.Client{APIKey: cfg.Groq.APIKey, Model: cfg.Groq.Model, Language: cfg.Groq.Language, Ignore: cfg.Groq.Ignore}
+	return stt.Client{
+		APIKey:   cfg.Groq.APIKey,
+		Model:    cfg.Groq.Model,
+		Language: cfg.Groq.Language,
+		Ignore:   cfg.Groq.Ignore,
+		Prompt:   cfg.Groq.Prompt,
+		Replace:  cfg.Groq.Replace,
+	}
 }
 
 func firmwares(p paths) firmware.Store {

@@ -12,7 +12,10 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
+	"unicode"
+	"unicode/utf8"
 )
 
 const (
@@ -33,7 +36,13 @@ type Client struct {
 	Model    string
 	Language string
 	Ignore   []string // phrases to cut from the text
-	URL      string   // overrides the API address, for tests
+	// Prompt tells the model the words to expect and how to spell them, up to
+	// 224 tokens. It guides, it doesn't instruct.
+	Prompt string
+	// Replace swaps words and phrases the model still gets wrong for how they're
+	// spelled, see Replace.
+	Replace map[string]string
+	URL     string // overrides the API address, for tests
 }
 
 // Transcribe returns the text of an audio file.
@@ -50,6 +59,9 @@ func (c Client) Transcribe(ctx context.Context, path string) (string, error) {
 	fields := map[string]string{"model": model, "response_format": "json", "temperature": "0"}
 	if c.Language != "" {
 		fields["language"] = c.Language
+	}
+	if prompt := strings.TrimSpace(c.Prompt); prompt != "" {
+		fields["prompt"] = prompt
 	}
 	for name, value := range fields {
 		if err := form.WriteField(name, value); err != nil {
@@ -92,7 +104,50 @@ func (c Client) Transcribe(ctx context.Context, path string) (string, error) {
 	if err := json.Unmarshal(answer, &result); err != nil {
 		return "", fmt.Errorf("groq: %w", err)
 	}
-	return Clean(result.Text, c.Ignore), nil
+	return Replace(Clean(result.Text, c.Ignore), c.Replace), nil
+}
+
+// Replace swaps whole words and phrases, in any case, for how the config
+// spells them. A match inside a longer word is left alone, and longer phrases
+// go first, so "клод код" wins over "клод".
+func Replace(text string, replacements map[string]string) string {
+	phrases := make([]string, 0, len(replacements))
+	for phrase := range replacements {
+		if strings.TrimSpace(phrase) != "" {
+			phrases = append(phrases, phrase)
+		}
+	}
+	slices.SortFunc(phrases, func(a, b string) int {
+		if diff := utf8.RuneCountInString(b) - utf8.RuneCountInString(a); diff != 0 {
+			return diff
+		}
+		return strings.Compare(a, b)
+	})
+	for _, phrase := range phrases {
+		pattern := regexp.MustCompile(`(?i)` + regexp.QuoteMeta(strings.TrimSpace(phrase)))
+		var out strings.Builder
+		last := 0
+		for _, match := range pattern.FindAllStringIndex(text, -1) {
+			if !wholeWord(text, match[0], match[1]) {
+				continue
+			}
+			out.WriteString(text[last:match[0]])
+			out.WriteString(replacements[phrase])
+			last = match[1]
+		}
+		out.WriteString(text[last:])
+		text = out.String()
+	}
+	return text
+}
+
+// wholeWord reports whether text[start:end] has no letter or digit right
+// before or after it. Go's \b only knows ASCII, so it can't tell for Cyrillic.
+func wholeWord(text string, start, end int) bool {
+	before, _ := utf8.DecodeLastRuneInString(text[:start])
+	after, _ := utf8.DecodeRuneInString(text[end:])
+	isWord := func(r rune) bool { return unicode.IsLetter(r) || unicode.IsDigit(r) }
+	return !isWord(before) && !isWord(after)
 }
 
 // Clean cuts the phrases from text, in any case and with the punctuation after

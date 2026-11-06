@@ -10,6 +10,7 @@ import (
 	"log/slog"
 	"net/url"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -47,6 +48,12 @@ type Groq struct {
 	// Ignore lists phrases to cut from transcripts, in any case. Whisper makes
 	// them up from its training data, usually over silence.
 	Ignore []string `yaml:"ignore"`
+	// Prompt tells the model the words to expect and how to spell them: names,
+	// terms, products. Groq takes up to 224 tokens of it.
+	Prompt string `yaml:"prompt"`
+	// Replace swaps words and phrases in a transcript, whole ones in any case,
+	// for how they should be spelled.
+	Replace map[string]string `yaml:"replace"`
 }
 
 // Device holds the actions of one paired button.
@@ -140,6 +147,11 @@ func Load(path string) (*Config, error) {
 }
 
 func (c *Config) validate() error {
+	for from := range c.Groq.Replace {
+		if strings.TrimSpace(from) == "" {
+			return errors.New("groq: replace has an empty phrase")
+		}
+	}
 	for id, device := range c.Devices {
 		if device.DeepSleepAfter < 0 {
 			return fmt.Errorf("device %s: deep_sleep_after can't be negative", id)
