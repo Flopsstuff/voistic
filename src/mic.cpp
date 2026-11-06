@@ -33,7 +33,7 @@ uint8_t* buffer = nullptr;
 volatile size_t written = 0;  // total bytes, the position is modulo kBufferBytes
 volatile size_t taken = 0;
 volatile bool capturing = false;
-bool started = false;
+volatile bool running = false;  // the capture task exists
 
 void put(int16_t sample) {
   if (written - taken + sizeof(sample) > kBufferBytes) {
@@ -79,21 +79,34 @@ void capture(void*) {
   i2s_channel_disable(channel);
   i2s_del_channel(channel);
   channel = nullptr;
+  running = false;
   vTaskDelete(nullptr);
 }
 
 }  // namespace
 
+// Can run again after micStop, for the next press while the board stays
+// ready. That drops whatever the last recording left unread.
 void micStart() {
-  if (started) {
+  if (capturing) {
     return;
   }
-  started = true;
-  buffer = static_cast<uint8_t*>(ps_malloc(kBufferBytes));
+  for (int i = 0; running && i < 100; ++i) {
+    delay(2);  // the last capture is still closing the channel
+  }
+  if (running) {
+    Serial.println("mic: still stopping");
+    return;
+  }
+  if (buffer == nullptr) {
+    buffer = static_cast<uint8_t*>(ps_malloc(kBufferBytes));
+  }
   if (buffer == nullptr) {
     Serial.println("mic: no memory");
     return;
   }
+  written = 0;
+  taken = 0;
 
   i2s_chan_config_t chan = I2S_CHANNEL_DEFAULT_CONFIG(I2S_NUM_0, I2S_ROLE_MASTER);
   chan.dma_desc_num = kDmaBuffers;
@@ -117,10 +130,14 @@ void micStart() {
     return;
   }
   capturing = true;
+  running = true;
   xTaskCreatePinnedToCore(capture, "mic", 4096, nullptr, 5, nullptr, 1);  // Wi-Fi runs on core 0
 }
 
 size_t micRead(uint8_t* out, size_t maxBytes) {
+  if (buffer == nullptr) {
+    return 0;
+  }
   size_t count = min(maxBytes, static_cast<size_t>(written - taken));
   const size_t position = taken % kBufferBytes;
   count = min(count, kBufferBytes - position);
@@ -132,5 +149,9 @@ size_t micRead(uint8_t* out, size_t maxBytes) {
 }
 
 void micStop() { capturing = false; }
+
+void micDiscard() { taken = written; }
+
+bool micIdle() { return !running; }
 
 #endif  // VOISTIC_MIC

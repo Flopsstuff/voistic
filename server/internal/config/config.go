@@ -56,6 +56,10 @@ type Device struct {
 	// How long a button that can stays connected after a press before deep
 	// sleep, see AwakeFor.
 	DeepSleepAfter time.Duration `yaml:"deep_sleep_after"`
+	// How long a button stays fully awake after a press, with Wi-Fi and the
+	// microphone on, so the next press needs no wake. 0s turns it off, see
+	// ReadyFor.
+	StayReady *time.Duration `yaml:"stay_ready"`
 }
 
 // DefaultDeepSleepAfter is how long a button stays connected when the config
@@ -69,6 +73,19 @@ func (c *Config) AwakeFor(device string) time.Duration {
 		return after
 	}
 	return DefaultDeepSleepAfter
+}
+
+// DefaultStayReady is how long a button stays fully awake after a press when
+// the config doesn't say.
+const DefaultStayReady = 30 * time.Second
+
+// ReadyFor is how long the device stays fully awake after a press, before it
+// sleeps: light sleep on a board that stays connected, deep sleep otherwise.
+func (c *Config) ReadyFor(device string) time.Duration {
+	if ready := c.Devices[device].StayReady; ready != nil {
+		return *ready
+	}
+	return DefaultStayReady
 }
 
 // Action is what a gesture does. Exactly one of Exec, HTTP, Key and Unpaste is set.
@@ -126,6 +143,9 @@ func (c *Config) validate() error {
 	for id, device := range c.Devices {
 		if device.DeepSleepAfter < 0 {
 			return fmt.Errorf("device %s: deep_sleep_after can't be negative", id)
+		}
+		if device.StayReady != nil && *device.StayReady < 0 {
+			return fmt.Errorf("device %s: stay_ready can't be negative", id)
 		}
 		for gesture, action := range device.Gestures {
 			if !isGesture(gesture) {

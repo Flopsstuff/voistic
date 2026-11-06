@@ -71,17 +71,20 @@ func (req pressRequest) remember(device *store.Device) {
 type pressResponse struct {
 	Status string `json:"status"`
 	Awake  int    `json:"awake_s,omitempty"` // how long to stay connected afterwards
+	Ready  *int   `json:"ready_s,omitempty"` // how long to stay fully awake first, 0 included
 	Seq    uint64 `json:"seq"`               // last, the firmware looks for it at the end
 }
 
-// awakeSeconds is how long device stays connected after this answer, or 0 when
-// the config can't be read, which leaves it to the button.
-func (s *Server) awakeSeconds(device string) int {
-	cfg, err := s.Config()
-	if err != nil {
-		return 0
+// answer is the reply to a press or a recording. Without a readable config the
+// times are left out, which leaves them to the button.
+func (s *Server) answer(device, status string, seq uint64) pressResponse {
+	response := pressResponse{Status: status, Seq: seq}
+	if cfg, err := s.Config(); err == nil {
+		ready := int(cfg.ReadyFor(device).Seconds())
+		response.Awake = int(cfg.AwakeFor(device).Seconds())
+		response.Ready = &ready
 	}
-	return int(cfg.AwakeFor(device).Seconds())
+	return response
 }
 
 type pairRequest struct {
@@ -183,7 +186,7 @@ func (s *Server) press(w http.ResponseWriter, r *http.Request) {
 	}
 
 	action, status := s.resolve(req)
-	response, err := json.Marshal(pressResponse{Status: status, Awake: s.awakeSeconds(req.Device), Seq: req.Seq})
+	response, err := json.Marshal(s.answer(req.Device, status, req.Seq))
 	if err != nil {
 		http.Error(w, "encode", http.StatusInternalServerError)
 		return

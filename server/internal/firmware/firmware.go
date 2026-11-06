@@ -128,6 +128,24 @@ func (s Store) file(info Info, device string) string {
 	return device + ".bin"
 }
 
+// Remove withdraws the image waiting for device, if there is one.
+func (s Store) Remove(device string) error {
+	if s.Dir == "" {
+		return nil
+	}
+	info, ok := s.Get(device)
+	if !ok {
+		return nil
+	}
+	if err := os.Remove(s.infoPath(device)); err != nil {
+		return err
+	}
+	if err := os.Remove(filepath.Join(s.Dir, s.file(info, device))); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	return nil
+}
+
 func (s Store) infoPath(device string) string { return filepath.Join(s.Dir, device+".json") }
 
 func writeAtomically(path string, data []byte) error {

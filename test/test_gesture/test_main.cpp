@@ -131,6 +131,8 @@ void test_setup_hold_boundaries() {
       {Clock::kPairMs, Gesture::Pair},
       {Clock::kResetMs - 1, Gesture::Pair},
       {Clock::kResetMs, Gesture::Reset},
+      {Clock::kResetEndMs - 1, Gesture::Reset},
+      {Clock::kResetEndMs, Gesture::Ignored},
   };
   for (const auto& test : cases) {
     auto detector = fivePresses();
@@ -149,6 +151,18 @@ void test_setup_hold_reports_progress() {
   assertHold(Hold::Armed, detector.hold(start + Clock::kPairMs - 1));
   assertHold(Hold::Pair, detector.hold(start + Clock::kPairMs));
   assertHold(Hold::Reset, detector.hold(start + Clock::kResetMs));
+}
+
+void test_hold_past_the_reset_window_cancels_without_a_release() {
+  const uint32_t start = 1100;
+  auto detector = fivePresses();
+  detector.update(start, true);
+  assertGesture(Gesture::None, settle(detector, start + Clock::kResetEndMs - 1));
+  assertHold(Hold::Reset, detector.hold(start + Clock::kResetEndMs - 1));
+  assertGesture(Gesture::Ignored, settle(detector, start + Clock::kResetEndMs));
+  assertHold(Hold::None, detector.hold(start + Clock::kResetEndMs));
+  detector.update(start + Clock::kResetEndMs + 5000, false);
+  assertGesture(Gesture::None, settle(detector, start + Clock::kResetEndMs + 6000));
 }
 
 void test_bounce_is_filtered() {
@@ -279,5 +293,6 @@ int main() {
   RUN_TEST(test_button_held_through_reset_is_not_a_press);
   RUN_TEST(test_counter_counts_presses_for_feedback);
   RUN_TEST(test_clock_wrap);
+  RUN_TEST(test_hold_past_the_reset_window_cancels_without_a_release);
   return UNITY_END();
 }

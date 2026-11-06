@@ -17,3 +17,6 @@ void linkSave(const char* ssid, const char* password);
 
 // Erases the saved network.
 void linkForget();
+
+// The saved network's name, once linkStart or linkSave has run, or empty.
+const char* linkSavedSsid();

@@ -18,3 +18,10 @@ size_t micRead(uint8_t* out, size_t maxBytes);
 
 // Stops capturing. What was captured can still be read.
 void micStop();
+
+// Drops what was captured so far, so the next read starts from now. Capturing
+// goes on.
+void micDiscard();
+
+// Whether the capture has fully stopped and let go of the ADC or I²S.
+bool micIdle();

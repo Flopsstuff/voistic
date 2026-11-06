@@ -64,20 +64,32 @@ bool linkStart() {
 }
 
 void linkSave(const char* newSsid, const char* newPassword) {
+  if (strcmp(ssid(), newSsid) == 0 && strcmp(password(), newPassword) == 0 &&
+      WiFi.status() == WL_CONNECTED) {
+    return;  // on it already
+  }
   WiFi.mode(WIFI_STA);
+  // The driver refuses a new network while it's still joining the old one.
+  WiFi.disconnect();
   WiFi.begin(newSsid, newPassword);  // the driver stores them
+  esp_wifi_get_config(WIFI_IF_STA, &stored);  // retries go to the new network
   startedAtMs = millis();
   usingCache = false;
   cachedChannel = 0;
   saved = false;
+  dropped = false;
+  retries = 0;
 }
 
 void linkForget() {
   WiFi.mode(WIFI_STA);
   WiFi.disconnect(/*wifioff=*/false, /*eraseap=*/true);
+  stored = {};
   cachedChannel = 0;
   saved = false;
 }
+
+const char* linkSavedSsid() { return ssid(); }
 
 bool linkPoll(uint32_t nowMs) {
   if (WiFi.status() == WL_CONNECTED) {

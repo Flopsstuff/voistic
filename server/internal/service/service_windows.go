@@ -63,3 +63,13 @@ func schtasks(args ...string) error {
 	}
 	return nil
 }
+
+// Restart restarts the task, if it's installed, so it runs a new binary. It
+// reports whether there was one.
+func Restart() (bool, error) {
+	if exec.Command("schtasks", "/Query", "/TN", Label).Run() != nil {
+		return false, nil
+	}
+	exec.Command("schtasks", "/End", "/TN", Label).Run() // fine if it wasn't running
+	return true, schtasks("/Run", "/TN", Label)
+}

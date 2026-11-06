@@ -33,19 +33,37 @@ import (
 
 const usage = `usage: voistic <command>
 
+Server:
   serve [--log <file>]     run the server, logging to stderr or a file
+  install                  run the server at login, on macOS and Windows
+  uninstall                stop running it at login
+  update [--check]         update voistic from the latest GitHub release and restart it
+  check                    validate the config
+  version                  print the version
+
+Buttons over Wi-Fi:
   pair                     accept one button, for two minutes
   forget <device>          drop a button's key, so it can pair again
   devices                  list paired buttons
   test <device> <gesture>  run an action without pressing the button
-  check                    validate the config
-  transcribe <file>        turn a recording into text next to it
-  firmware <device> <file> <version>  offer a firmware to a button, it asks on 5 presses
-  install                  run the server at login, on macOS and Windows
-  uninstall                stop running it at login
-  version                  print the version
+  firmware <device> latest [--no-mic]
+                           offer a button the latest release's firmware, it asks on 5 presses
+  firmware <device> <file> <version>
+                           offer a button a firmware file
 
-A button only pairs while voistic pair is waiting.
+A button on this computer's USB:
+  usb [status]             what it says about itself
+  usb setup                Wi-Fi, pairing and a check, all a new button needs
+  usb wifi [ssid [password]]  put it on a network, by default this computer's
+  usb pair | check | brightness <0..1> | update [file] | log | reset
+                           see voistic usb help
+
+Recordings:
+  transcribe <file>        turn a recording into text next to it
+
+  help                     this text
+
+A button pairs over Wi-Fi only while voistic pair is waiting, or at once over USB.
 
 Gestures: single, double, triple, long.
 
@@ -92,6 +110,17 @@ func run(args []string) error {
 		return nil
 	case command == "check" && len(args) == 1:
 		return check(paths)
+	case command == "help" || command == "-h" || command == "--help":
+		fmt.Print(usage)
+		return nil
+	case command == "usb":
+		return runUSB(paths, client, args[1:])
+	case command == "update" && len(args) == 1:
+		return selfUpdate(false)
+	case command == "update" && len(args) == 2 && args[1] == "--check":
+		return selfUpdate(true)
+	case command == "firmware" && (len(args) == 3 || len(args) == 4) && args[2] == "latest":
+		return addLatestFirmware(paths, args[1], len(args) == 3 || args[3] != "--no-mic")
 	case command == "firmware" && len(args) == 4:
 		return addFirmware(paths, args[1], args[2], args[3])
 	case command == "install" && len(args) == 1:
@@ -195,7 +224,7 @@ func serve(p paths, output io.Writer) error {
 		server.Close()
 	}()
 
-	cli := &control.Server{Config: loader.Get, Store: states, Pairing: window, Refresh: advertiser.Refresh, Log: log}
+	cli := &control.Server{Config: loader.Get, Store: states, Pairing: window, Firmware: firmwares(p), Refresh: advertiser.Refresh, Log: log}
 	controlDone := make(chan error, 1)
 	go func() { controlDone <- cli.Serve(ctx, p.socket) }()
 

@@ -4,7 +4,8 @@
 //   1, 2 or 3 short presses   Single, Double, Triple
 //   hold, however long        Long, on release; cancelled if the link never came
 //   5 short                   Update, which asks the server for a new firmware
-//   5 short, then hold        Pair after 5 s, Reset after 15 s, on release
+//   5 short, then hold        Pair after 5 s, Reset from 15 s to 20 s, on release;
+//                             held longer, it cancels at once
 //
 // The setup gestures hide behind the five presses so that a hold stays free for
 // other uses, such as talking to a future board with a microphone: the feedback
@@ -31,6 +32,9 @@ class GestureDetector {
   static constexpr uint32_t kSetupPresses = 5;
   static constexpr uint32_t kPairMs = 5000;
   static constexpr uint32_t kResetMs = 15000;
+  // The reset window ends here, so a change of mind is always possible: a hold
+  // past it means nothing, and the button can be let go safely.
+  static constexpr uint32_t kResetEndMs = 20000;
 
   // down is the button at startup. A press that woke the board counts even if
   // it ended before startup; a button already down after a plain reset doesn't.

@@ -138,8 +138,8 @@ void micStart() {
   if (capturing) {
     return;
   }
-  for (int i = 0; running && i < 50; ++i) {
-    delay(2);  // the last capture is still closing the ADC
+  for (int i = 0; running && i < 150; ++i) {
+    delay(2);  // the last capture is still closing the ADC, a read takes up to 100 ms
   }
   if (running) {
     Serial.println("mic: still stopping");
@@ -177,5 +177,9 @@ size_t micRead(uint8_t* out, size_t maxBytes) {
 }
 
 void micStop() { capturing = false; }
+
+void micDiscard() { taken = written; }
+
+bool micIdle() { return !running; }
 
 #endif  // VOISTIC_MIC && VOISTIC_BOARD_C6

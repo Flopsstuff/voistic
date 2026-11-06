@@ -157,3 +157,32 @@ devices:
 		t.Error("a negative time was accepted")
 	}
 }
+
+func TestStayReady(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.yaml")
+	write(t, path, `
+devices:
+  voistic-25bc:
+    stay_ready: 45s
+  voistic-9af4:
+    stay_ready: 0s
+`)
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := cfg.ReadyFor("voistic-25bc"); got != 45*time.Second {
+		t.Errorf("set: %v", got)
+	}
+	if got := cfg.ReadyFor("voistic-9af4"); got != 0 {
+		t.Errorf("off: %v", got)
+	}
+	if got := cfg.ReadyFor("voistic-other"); got != DefaultStayReady {
+		t.Errorf("default: %v", got)
+	}
+
+	write(t, path, "devices:\n  voistic-25bc:\n    stay_ready: -1s\n")
+	if _, err := Load(path); err == nil {
+		t.Error("a negative stay_ready should be refused")
+	}
+}

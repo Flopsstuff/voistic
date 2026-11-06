@@ -463,12 +463,9 @@ func TestUpdateOffersAnotherVersionAndServesIt(t *testing.T) {
 		return answer
 	}
 
-	if answer := check(1, "new"); !strings.Contains(answer, `"status":"ok"`) {
-		t.Errorf("up to date got %s", answer)
-	}
-	answer := check(2, "old")
+	answer := check(1, "old")
 	if !strings.Contains(answer, `"status":"update"`) || !strings.Contains(answer, info.SHA256) ||
-		!strings.HasSuffix(answer, `"seq":2}`) {
+		!strings.HasSuffix(answer, `"seq":1}`) {
 		t.Errorf("old got %s", answer)
 	}
 
@@ -494,14 +491,26 @@ func TestUpdateOffersAnotherVersionAndServesIt(t *testing.T) {
 		data, _ := io.ReadAll(resp.Body)
 		return resp.StatusCode, string(data)
 	}
-	if code, data := fetch(2, true); code != http.StatusOK || data != image {
+	if code, data := fetch(1, true); code != http.StatusOK || data != image {
 		t.Errorf("download got %d %q", code, data)
 	}
-	if code, _ := fetch(2, false); code != http.StatusUnauthorized {
+	if code, _ := fetch(1, false); code != http.StatusUnauthorized {
 		t.Errorf("unsigned download got %d", code)
 	}
-	if code, _ := fetch(1, true); code != http.StatusConflict {
+
+	// The new firmware's first check confirms it, and the offer is done with.
+	if answer := check(2, "new"); !strings.Contains(answer, `"status":"ok"`) {
+		t.Errorf("up to date got %s", answer)
+	}
+	if _, ok := h.api.Firmware.Get(testDevice); ok {
+		t.Error("the installed firmware is still on offer")
+	}
+	if code, _ := fetch(1, true); code == http.StatusOK {
 		t.Errorf("old seq got %d", code)
+	}
+	// A later firmware, flashed over USB, isn't taken back to it.
+	if answer := check(3, "later"); !strings.Contains(answer, `"status":"ok"`) {
+		t.Errorf("later got %s", answer)
 	}
 }
 
@@ -538,6 +547,9 @@ func TestAnswerSaysHowLongToStayAwake(t *testing.T) {
 	}
 	if answer.Awake != int(config.DefaultDeepSleepAfter.Seconds()) {
 		t.Errorf("awake_s = %d", answer.Awake)
+	}
+	if answer.Ready == nil || *answer.Ready != int(config.DefaultStayReady.Seconds()) {
+		t.Errorf("ready_s = %v", answer.Ready)
 	}
 	if !strings.HasSuffix(body, fmt.Sprintf(`"seq":%d}`, answer.Seq)) {
 		t.Errorf("seq isn't last, the firmware looks for it there: %s", body)

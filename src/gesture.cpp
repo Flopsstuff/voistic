@@ -32,6 +32,10 @@ void GestureDetector::tick(uint32_t nowMs) {
     }
   }
 
+  if (down_ && counting_ && presses_ == kSetupPresses && nowMs - pressedAtMs_ >= kResetEndMs) {
+    finish(Gesture::Ignored);  // held past the reset window, which cancels
+  }
+
   if (!down_ && presses_ > 0 && nowMs - releasedAtMs_ >= kMultiPressGapMs) {
     switch (presses_) {
       case 1:

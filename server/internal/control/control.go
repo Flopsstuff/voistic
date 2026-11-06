@@ -5,6 +5,8 @@ package control
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -21,6 +23,7 @@ import (
 	"voistic/server/internal/action"
 	"voistic/server/internal/board"
 	"voistic/server/internal/config"
+	"voistic/server/internal/firmware"
 	"voistic/server/internal/pairing"
 	"voistic/server/internal/store"
 )
@@ -56,13 +59,30 @@ type PairResult struct {
 	Device string `json:"device"`
 }
 
+// AdoptRequest asks for a key for a button on this computer's USB, which then
+// skips pairing over the network.
+type AdoptRequest struct {
+	Device   string `json:"device"`
+	Board    string `json:"board"`
+	Firmware string `json:"firmware"`
+}
+
+// AdoptResult is what the button needs to reach this server.
+type AdoptResult struct {
+	Key     string `json:"key"`
+	Address string `json:"address"` // host:port
+}
+
 // Server answers the CLI.
 type Server struct {
 	Config  func() (*config.Config, error)
 	Store   *store.Store
 	Pairing *pairing.Window
-	Refresh func() string // renews mDNS, returns where buttons find this server
-	Log     *slog.Logger
+	// Firmware is where images wait for buttons. A button paired over USB
+	// starts afresh, so what waited for it before is withdrawn.
+	Firmware firmware.Store
+	Refresh  func() string // renews mDNS, returns where buttons find this server
+	Log      *slog.Logger
 }
 
 // Serve listens on the socket until ctx ends.
@@ -90,6 +110,7 @@ func (s *Server) Serve(ctx context.Context, path string) error {
 	mux.HandleFunc("POST /pair", s.pair)
 	mux.HandleFunc("POST /test", s.test)
 	mux.HandleFunc("POST /forget", s.forget)
+	mux.HandleFunc("POST /adopt", s.adopt)
 	mux.HandleFunc("GET /devices", s.devices)
 
 	server := &http.Server{Handler: mux}
@@ -178,6 +199,35 @@ func (s *Server) forget(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, struct{}{})
 }
 
+// adopt pairs a button handed over USB. Holding it is the proof that it belongs
+// here, so no pairing window is needed.
+func (s *Server) adopt(w http.ResponseWriter, r *http.Request) {
+	var req AdoptRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Device == "" {
+		http.Error(w, "bad json", http.StatusBadRequest)
+		return
+	}
+	address := s.Refresh()
+	if address == "offline" {
+		http.Error(w, "this computer has no network address for the button", http.StatusServiceUnavailable)
+		return
+	}
+	raw := make([]byte, 32)
+	rand.Read(raw)
+	key := hex.EncodeToString(raw)
+	// A re-paired device counts from zero again, so it gets a new record.
+	device := store.Device{Key: key, Firmware: req.Firmware, Board: req.Board, PairedAt: time.Now()}
+	if err := s.Store.Put(req.Device, device); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if err := s.Firmware.Remove(req.Device); err != nil {
+		s.Log.Error("can't withdraw the firmware waiting for a button", "device", req.Device, "err", err)
+	}
+	s.Log.Info("paired over USB", "device", req.Device, "board", board.Of(req.Board), "fw", req.Firmware, "address", address)
+	writeJSON(w, AdoptResult{Key: key, Address: address})
+}
+
 func (s *Server) devices(w http.ResponseWriter, _ *http.Request) {
 	cfg, err := s.Config()
 	if err != nil {
@@ -237,6 +287,13 @@ func (c *Client) Test(device, gesture string) (TestResult, error) {
 func (c *Client) Forget(device string) error {
 	var result struct{}
 	return c.call(http.MethodPost, "/forget", TestRequest{Device: device}, &result)
+}
+
+// Adopt gives a button on USB a key, see AdoptRequest.
+func (c *Client) Adopt(req AdoptRequest) (AdoptResult, error) {
+	var result AdoptResult
+	err := c.call(http.MethodPost, "/adopt", req, &result)
+	return result, err
 }
 
 // Devices lists paired buttons.

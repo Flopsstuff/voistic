@@ -97,3 +97,29 @@ func TestOlderEntriesStillOpen(t *testing.T) {
 		t.Error("the old image file is still there")
 	}
 }
+
+func TestRemoveDeletesTheImageInTheStore(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "firmware.bin")
+	if err := os.WriteFile(path, header(13), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	store := Store{Dir: filepath.Join(dir, "store")}
+	if _, err := store.Add("voistic-9af4", board.IoTButtonC6, path, "1.2"); err != nil {
+		t.Fatal(err)
+	}
+	// A file of the same name where the server runs must survive.
+	t.Chdir(dir)
+	if err := os.WriteFile("voistic-9af4-iot-button-c6.bin", []byte("not ours"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Remove("voistic-9af4"); err != nil {
+		t.Fatal(err)
+	}
+	if entries, _ := os.ReadDir(store.Dir); len(entries) != 0 {
+		t.Errorf("left in the store: %v", entries)
+	}
+	if _, err := os.Stat("voistic-9af4-iot-button-c6.bin"); err != nil {
+		t.Errorf("removed a file outside the store: %v", err)
+	}
+}

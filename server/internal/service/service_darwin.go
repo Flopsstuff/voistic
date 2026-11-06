@@ -60,3 +60,12 @@ func launchctl(args ...string) error {
 	}
 	return nil
 }
+
+// Restart restarts the agent, if it's installed, so it runs a new binary. It
+// reports whether there was one.
+func Restart() (bool, error) {
+	if exec.Command("launchctl", "print", target()).Run() != nil {
+		return false, nil
+	}
+	return true, launchctl("kickstart", "-k", target())
+}

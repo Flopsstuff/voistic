@@ -13,3 +13,6 @@ func Install(string, string) error {
 func Uninstall() error {
 	return errors.New("uninstall only works on macOS and Windows for now")
 }
+
+// Restart does nothing here, since nothing is installed.
+func Restart() (bool, error) { return false, nil }

@@ -55,6 +55,16 @@ func (s *Server) update(w http.ResponseWriter, r *http.Request) {
 			"image", info.Board, "device_board", board.Of(device.Board))
 		ok = false
 	}
+	if ok && info.Version == req.FW {
+		// It runs the image now, and an offer left behind would take it back
+		// to this one from whatever it runs later.
+		if err := s.Firmware.Remove(req.Device); err != nil {
+			s.Log.Error("can't withdraw an installed firmware", "device", req.Device, "err", err)
+		} else {
+			s.Log.Info("firmware in place, offer withdrawn", "device", req.Device, "version", info.Version)
+		}
+		ok = false
+	}
 	if ok && info.Version != req.FW {
 		answer.Status = StatusUpdate
 		answer.Version = info.Version

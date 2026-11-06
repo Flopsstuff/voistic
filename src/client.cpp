@@ -55,6 +55,7 @@ struct ServerAddress {
 Preferences prefs;
 
 int awakeSeconds = -1;  // from the last answer, -1 until one says
+int readySeconds = -1;
 
 WiFiClient audioSocket;
 uint64_t audioSeq = 0;
@@ -203,6 +204,10 @@ bool parseAnswer(const String& body, uint64_t seq, const uint8_t* key,
   if (awake >= 0) {
     awakeSeconds = body.substring(awake + 10).toInt();
   }
+  const int ready = body.indexOf("\"ready_s\":");
+  if (ready >= 0) {
+    readySeconds = body.substring(ready + 10).toInt();
+  }
   if (body.indexOf("\"status\":\"ok\"") >= 0) {
     result = SendResult::Accepted;
   } else if (body.indexOf("\"status\":\"unbound\"") >= 0) {
@@ -284,6 +289,24 @@ void clientSaveBrightness(float brightness) {
 bool clientIsPaired() {
   openPrefs();
   return prefs.isKey(kKeyKey);
+}
+
+String clientServer() {
+  openPrefs();
+  const String host = prefs.getString(kHostKey);
+  return host.isEmpty() ? host : host + ":" + String(prefs.getUShort(kPortKey));
+}
+
+bool clientAdopt(const String& hexKey, const String& host, uint16_t port) {
+  openPrefs();
+  uint8_t key[kKeyBytes];
+  if (!fromHex(hexKey, key, kKeyBytes) || host.isEmpty() || port == 0) {
+    return false;
+  }
+  prefs.putString(kKeyKey, hexKey);
+  prefs.putULong64(kSeqKey, 0);
+  saveServer({host, port});
+  return true;
 }
 
 SendResult clientSendPress(const char* gesture) {
@@ -572,3 +595,5 @@ void clientForget() {
 }
 
 int clientAwakeSeconds() { return awakeSeconds; }
+
+int clientReadySeconds() { return readySeconds; }

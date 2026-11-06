@@ -36,6 +36,12 @@ void ledsSet(Led led, bool half = false);
 // Scales every colour on the pixel or the RGB LED, from 0 to 1.
 void ledsSetBrightness(float brightness);
 
+// Whether a state that plays once, such as Accepted, has played out.
+bool ledsDone();
+
+// The brightness the states are drawn at, from 0 to 1.
+float ledsBrightness();
+
 // Blocks until a state with a fixed length has finished.
 void ledsWait();
 

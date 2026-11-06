@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"voistic/server/internal/config"
+	"voistic/server/internal/firmware"
 	"voistic/server/internal/pairing"
 	"voistic/server/internal/store"
 )
@@ -34,7 +35,8 @@ func start(t *testing.T) (*Client, *pairing.Window, string) {
 
 	window := &pairing.Window{}
 	server := &Server{
-		Refresh: func() string { return "192.0.2.1:8787" },
+		Firmware: firmware.Store{Dir: filepath.Join(dir, "firmware")},
+		Refresh:  func() string { return "192.0.2.1:8787" },
 		Config: func() (*config.Config, error) {
 			return &config.Config{Devices: map[string]config.Device{
 				"dev": {Name: "Bedside", Gestures: map[string]config.Action{
@@ -180,5 +182,50 @@ func TestStaleSocketIsReplaced(t *testing.T) {
 	}
 	if _, err := os.Stat(path); !os.IsNotExist(err) {
 		t.Errorf("stat: %v", err)
+	}
+}
+
+func TestAdoptGivesNewKey(t *testing.T) {
+	client, _, socket := start(t)
+	result, err := client.Adopt(AdoptRequest{Device: "dev", Board: "iot-button-c6", Firmware: "v1"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Address != "192.0.2.1:8787" || len(result.Key) != 64 {
+		t.Errorf("result = %+v", result)
+	}
+	s, err := store.Open(filepath.Join(filepath.Dir(socket), "state.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	device, ok := s.Device("dev")
+	if !ok || device.Key != result.Key || device.Seq != 0 || device.Board != "iot-button-c6" {
+		t.Errorf("stored = %+v", device)
+	}
+}
+
+func TestAdoptWithdrawsWaitingFirmware(t *testing.T) {
+	client, _, socket := start(t)
+	store := firmware.Store{Dir: filepath.Join(filepath.Dir(socket), "firmware")}
+	image := filepath.Join(filepath.Dir(socket), "image.bin")
+	// An ESP32-C6 image header.
+	if err := os.WriteFile(image, []byte("\xE9\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x0D\x00image"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.Add("dev", "iot-button-c6", image, "old"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := client.Adopt(AdoptRequest{Device: "dev", Board: "iot-button-c6", Firmware: "new"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := store.Get("dev"); ok {
+		t.Error("the firmware that waited before the pairing is still on offer")
+	}
+}
+
+func TestAdoptNeedsDevice(t *testing.T) {
+	client, _, _ := start(t)
+	if _, err := client.Adopt(AdoptRequest{}); err == nil {
+		t.Error("a request with no device should fail")
 	}
 }

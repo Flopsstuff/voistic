@@ -6,9 +6,12 @@
 // is configured on the server. See gesture.h for the gestures and leds.cpp for
 // what each colour means.
 //
-// A board that stays connected (board.h) runs each press in its own task
-// instead, which finish() ends, and loop() waits for the next press in light
-// sleep with Wi-Fi up, then deep-sleeps after the time the server asked for.
+// Each press runs in its own task, which finish() ends. loop() then keeps the
+// board fully awake for the server's ready_s, with Wi-Fi and the microphone on,
+// so a quick next press starts at once. Presses made meanwhile, even during the
+// last one's answer or its green fade, are kept with their times and replayed.
+// After that a board that stays connected (board.h) waits for the next press
+// in light sleep with Wi-Fi up, and deep-sleeps after the server's awake_s.
 
 #include <Arduino.h>
 #include <WiFi.h>
@@ -34,12 +37,14 @@ namespace {
 constexpr gpio_num_t kButtonGpio = static_cast<gpio_num_t>(kButtonPin);
 
 constexpr uint32_t kAwakeLimitMs = 15000;
+constexpr uint32_t kDefaultReadyMs = 30000;  // without a word from the server
 constexpr uint32_t kIdleAfterResetMs = 10000;  // room for a USB reflash or a hold
 constexpr uint32_t kJoinTimeoutMs = 15000;
 constexpr uint32_t kPairTimeoutMs = 120000;
 constexpr uint32_t kPairCancelHoldMs = 2000;
 constexpr uint32_t kPortalTimeoutMs = 300000;
 constexpr uint32_t kMaxRecordingMs = 180000;
+constexpr uint32_t kUsbIdleMs = 30000;  // a USB session ends this long after its last command
 constexpr size_t kMaxEdges = 32;
 
 struct Edge {
@@ -56,13 +61,18 @@ size_t edgeTail = 0;
 GestureDetector* detector = nullptr;
 bool wokenByPress = false;
 uint32_t cycleStartMs = 0;  // when this press began, the boot or a wake from waiting
-bool cycleOnTask = false;   // each press runs in its own task, see loop()
 TaskHandle_t supervisor = nullptr;
+// How the next press's task starts: from waiting ready, with its edges in the
+// buffer, or from a wake out of light sleep at wakeMs, with the button down.
+bool nextFromReady = false;
+uint32_t wakeMs = 0;
 bool linkStarted = false;
 bool networkSaved = false;
 bool warmedUp = false;
 const char* pendingGesture = nullptr;
 Led pendingLook = Led::Off;
+bool usbSession = false;  // a host is working on the board over USB
+uint32_t usbLastMs = 0;
 
 void IRAM_ATTR onButtonEdge() {
   const size_t head = edgeHead;
@@ -95,32 +105,43 @@ void readButton() {
 }
 
 // Whether this press can end by waiting connected for the next one.
-bool canStayConnected() {
-  return cycleOnTask && clientIsPaired() && WiFi.status() == WL_CONNECTED;
-}
+bool canStayConnected() { return clientIsPaired() && WiFi.status() == WL_CONNECTED; }
 
-// Shows the final state, then sleeps once the button is up, since a held button
-// would wake the board again at once. A low battery adds its warning. Where the
-// board stays connected, it ends this press's task instead.
+// Shows the final state and ends this press's task, leaving the wait for the
+// next press to loop(). The outcome keeps fading meanwhile, and a press cuts it
+// short. Without the network there's nothing to wait for, so the board sleeps
+// once the button is up, since a held button would wake it again at once. A low
+// battery adds its warning, which waits for the fade.
 [[noreturn]] void finish(Led outcome) {
   ledsSet(outcome);
   const bool stay = canStayConnected();
   if (!stay) {
     WiFi.disconnect(/*wifioff=*/true);  // the fade doesn't need the radio
   }
-  ledsWait();
   const int battery = boardBatteryMv();
-  if (battery > 0 && battery < kBatteryLowMv) {
-    ledsSet(Led::BatteryLow);
+  const bool low = battery > 0 && battery < kBatteryLowMv;
+  if (!stay || low) {
     ledsWait();
-  }
-  ledsSet(Led::Off);
-  while (buttonDown()) {
-    delay(10);
+    if (low) {
+      ledsSet(Led::BatteryLow);
+      ledsWait();
+    }
+    ledsSet(Led::Off);
   }
   if (stay) {
+    if (buttonDown()) {
+      // Still down from this press, such as a recording at its limit, which
+      // isn't the start of the next one.
+      while (buttonDown()) {
+        delay(10);
+      }
+      edgeTail = edgeHead;
+    }
     xTaskNotifyGive(supervisor);
     vTaskDelete(nullptr);
+  }
+  while (buttonDown()) {
+    delay(10);
   }
   sleepNow();
 }
@@ -292,27 +313,144 @@ bool firmwareOnProbation() {
 }
 #endif
 
-// `wifi ssid|password` sets the network over USB, without the setup page, and
-// `brightness 0.2` the pixel, from 0 to 1. Both stay on the board.
-void handleCommand(const String& line) {
-  if (line.startsWith("brightness ")) {
-    const float brightness = line.substring(11).toFloat();
-    if (isDigit(line[11]) && brightness <= 1.0f) {
-      clientSaveBrightness(brightness);
-      Serial.printf("brightness: saved %.2f\n", brightness);
-      return;
+// Commands over USB, one a line, each answered by one line that starts with its
+// name, which is what `voistic usb` speaks. The first `hello` holds the board
+// awake and leaves the button alone until `bye`, or until kUsbIdleMs without a
+// command, so the host can work on it at its own pace.
+//
+//   hello                     starts the session, answers with the status
+//   status                    {"device":..., "paired":..., "connected":...}
+//   wifi ssid|password        saves a network and joins it
+//   brightness 0.2            the pixel, from 0 to 1
+//   pair key host port        a key from the server, in place of pairing over Wi-Fi
+//   check                     asks the paired server, which proves key and network
+//   update                    takes the firmware the server holds for it, and restarts
+//   reset                     forgets the network and the server
+//   bye                       ends the session; the board carries on as after a press
+
+String jsonEscape(const String& text) {
+  String escaped;
+  for (const char c : text) {
+    if (c == '"' || c == '\\') {
+      escaped += '\\';
+    }
+    if (static_cast<uint8_t>(c) >= 0x20) {
+      escaped += c;
     }
   }
-  const int separator = line.indexOf('|');
-  if (!line.startsWith("wifi ") || separator < 0) {
-    Serial.println("usage: wifi ssid|password, brightness 0.2");
+  return escaped;
+}
+
+String statusJson() {
+  const bool connected = WiFi.status() == WL_CONNECTED;
+  String json = "{\"device\":\"" + clientDeviceId() + "\",\"board\":\"" VOISTIC_BOARD
+                "\",\"fw\":\"" FW_VERSION "\",\"paired\":" +
+                String(clientIsPaired() ? "true" : "false") + ",\"server\":\"" +
+                jsonEscape(clientServer()) + "\",\"ssid\":\"" + jsonEscape(linkSavedSsid()) +
+                "\",\"connected\":" + String(connected ? "true" : "false");
+  if (connected) {
+    json += ",\"ip\":\"" + WiFi.localIP().toString() + "\",\"rssi\":" + String(WiFi.RSSI());
+  }
+#ifdef VOISTIC_MIC
+  json += ",\"mic\":true";
+#endif
+  return json + ",\"battery_mv\":" + String(boardBatteryMv()) +
+         ",\"brightness\":" + String(ledsBrightness(), 2) + "}";
+}
+
+void handleCommand(const String& line) {
+  if (!usbSession && line != "hello" && !line.startsWith("wifi ") &&
+      !line.startsWith("brightness ")) {
+    Serial.println("error: say hello first");
     return;
   }
-  const String ssid = line.substring(5, separator);
-  linkSave(ssid.c_str(), line.substring(separator + 1).c_str());
-  linkStarted = true;
-  networkSaved = true;
-  Serial.printf("wifi: saved %s\n", ssid.c_str());
+  usbLastMs = millis();
+
+  if (line == "hello") {
+    usbSession = true;
+    Serial.printf("usb: session, the button is ignored until bye\n");
+    startLink();  // so the status can tell whether the network works
+    Serial.println("hello: " + statusJson());
+  } else if (line == "status") {
+    Serial.println("status: " + statusJson());
+  } else if (line.startsWith("brightness ")) {
+    const float brightness = line.substring(11).toFloat();
+    if (!isDigit(line[11]) || brightness > 1.0f) {
+      Serial.println("error: brightness goes from 0 to 1");
+      return;
+    }
+    clientSaveBrightness(brightness);
+    Serial.printf("brightness: saved %.2f\n", brightness);
+  } else if (line.startsWith("wifi ")) {
+    const int separator = line.indexOf('|');
+    if (separator < 0) {
+      Serial.println("error: wifi ssid|password");
+      return;
+    }
+    const String ssid = line.substring(5, separator);
+    linkSave(ssid.c_str(), line.substring(separator + 1).c_str());
+    linkStarted = true;
+    networkSaved = true;
+    Serial.printf("wifi: saved %s\n", ssid.c_str());
+  } else if (line.startsWith("pair ")) {
+    const int hostAt = line.indexOf(' ', 5);
+    const int portAt = hostAt < 0 ? -1 : line.indexOf(' ', hostAt + 1);
+    if (portAt < 0 || !clientAdopt(line.substring(5, hostAt), line.substring(hostAt + 1, portAt),
+                                   line.substring(portAt + 1).toInt())) {
+      Serial.println("error: pair key host port");
+      return;
+    }
+    Serial.printf("pair: saved for %s\n", clientServer().c_str());
+  } else if (line == "check") {
+    startLink();
+    UpdateOffer offer;
+    const UpdateCheck check = !clientIsPaired()      ? UpdateCheck::Failed
+                              : !joinSavedNetwork() ? UpdateCheck::Failed
+                                                    : clientCheckUpdate(offer);
+    Serial.printf("check: %s\n", check == UpdateCheck::Current   ? "ok"
+                                 : check == UpdateCheck::Offered ? "update waiting"
+                                 : !clientIsPaired()             ? "not paired"
+                                 : WiFi.status() != WL_CONNECTED ? "no network"
+                                                                 : "no answer from the server");
+  } else if (line == "update") {
+    startLink();
+    UpdateOffer offer;
+    const UpdateCheck check = !clientIsPaired()      ? UpdateCheck::Failed
+                              : !joinSavedNetwork() ? UpdateCheck::Failed
+                                                    : clientCheckUpdate(offer);
+    if (check == UpdateCheck::Current) {
+      Serial.println("update: current");
+      return;
+    }
+    if (check == UpdateCheck::Failed) {
+      Serial.println("error: can't reach the server");
+      return;
+    }
+    ledsSet(Led::Updating);
+    if (!clientDownloadUpdate(offer)) {
+      ledsSet(Led::Failed);
+      Serial.println("error: the download failed");
+      return;
+    }
+    Serial.printf("update: installed %s, restarting\n", offer.version.c_str());
+    Serial.flush();
+    delay(100);
+    esp_restart();
+  } else if (line == "reset") {
+    startLink();
+    joinSavedNetwork();  // to tell the server, while the network is still known
+    clientForget();
+    linkForget();
+    linkStarted = false;
+    networkSaved = false;
+    Serial.println("reset: done");
+  } else if (line == "bye") {
+    Serial.println("bye: done, carrying on as after a press");
+    usbSession = false;
+    finish(Led::Off);
+  } else {
+    Serial.println("error: unknown command " + line);
+  }
 }
 
 void pollSerial() {
@@ -324,6 +462,7 @@ void pollSerial() {
       line += c;
     } else if (line.length() > 0) {
       handleCommand(line);
+      usbLastMs = millis();  // a slow command doesn't eat into the idle time
       line = "";
     }
   }
@@ -374,25 +513,50 @@ void beginFirstCycle() {
   }
 }
 
-// A press that woke the board from waiting connected.
+// A press after the last one, while waiting ready or connected. The edges
+// since are still in the buffer, and readButton() replays them with their
+// times, so a quick press isn't lost.
 void beginNextCycle() {
   cycleStartMs = millis();
   wokenByPress = true;
   pendingGesture = nullptr;
   pendingLook = Led::Off;
-  warmedUp = false;  // the server's address may have dropped out of the ARP cache
-  edgeTail = edgeHead;
+  ledsSet(Led::Off);  // cuts the last outcome short, and lets it play again
   delete detector;
-  detector = new GestureDetector(buttonDown(), /*wokenByPress=*/true, cycleStartMs);
+  if (nextFromReady) {
+    // The audio since the last press ended is kept, see waitReady().
+    detector = new GestureDetector(/*down=*/false, /*wokenByPress=*/false, cycleStartMs);
+  } else {
+    // The press woke it with the button down. If it's up already and its
+    // release missed the buffer, it still counts as a press.
+    warmedUp = false;  // the server's address may have dropped out of the ARP cache
+    detector = new GestureDetector(buttonDown() || edgeTail != edgeHead, /*wokenByPress=*/true, wakeMs);
+  }
 #ifdef VOISTIC_MIC
-  micStart();
+  micStart();  // a no-op if it's still running
 #endif
 }
 
 void runCycle() {
   const uint32_t now = millis();
-  readButton();
+  if (pendingGesture == nullptr) {
+    readButton();  // once a gesture is taken, later presses wait for the next task
+  }
   pollSerial();
+
+  if (usbSession) {
+    // Read afresh: a command just now may be later than the cycle's start.
+    if (millis() - usbLastMs >= kUsbIdleMs) {
+      Serial.println("usb: no command for a while, ending the session");
+      usbSession = false;
+      finish(Led::Off);
+    }
+    if (linkStarted) {
+      linkPoll(now);
+    }
+    delay(1);
+    return;
+  }
 
   if (detector->pressCount() > 0) {
     startLink();  // the first press after a reset, a wake press is already on it
@@ -428,6 +592,11 @@ void runCycle() {
   } else if (gesture != Gesture::None) {
     pendingGesture = gestureName(gesture);
     pendingLook = gesture == Gesture::Long ? Led::HoldWaiting : pressLook();
+#ifdef VOISTIC_MIC
+    // This press is over, so the next recording starts from here, even if
+    // its hold begins while this one is still being answered.
+    micDiscard();
+#endif
   }
 
   if (pendingGesture != nullptr && connected) {
@@ -469,6 +638,45 @@ void startCycleTask(bool first) {
   xTaskCreate(cycleTask, "press", 8192, first ? &supervisor : nullptr, 1, nullptr);
 }
 
+// Whether a press came since the last task stopped reading the button. Until
+// one does, the audio is dropped as it comes, so a recording starts within a
+// few ms of its press, and the buffer never fills with silence.
+bool pressWaiting() {
+  if (edgeTail != edgeHead || buttonDown()) {
+    return true;
+  }
+#ifdef VOISTIC_MIC
+  micDiscard();
+#endif
+  return false;
+}
+
+// Keeps the board fully awake after a press, with Wi-Fi and the microphone on,
+// so a quick next press starts at once. Then lets the outcome's fade play out.
+// Returns true on a press, which may have come before this was even called.
+bool waitReady(uint32_t limitMs) {
+  if (limitMs > 0) {
+#ifdef VOISTIC_MIC
+    micStart();  // warm, in case the next press is a hold
+#endif
+    Serial.printf("ready: up to %lu s\n", static_cast<unsigned long>(limitMs / 1000));
+  }
+  const uint32_t start = millis();
+  while (millis() - start < limitMs && WiFi.status() == WL_CONNECTED) {
+    if (pressWaiting()) {
+      return true;
+    }
+    delay(5);
+  }
+  while (!ledsDone()) {
+    if (pressWaiting()) {
+      return true;
+    }
+    delay(5);
+  }
+  return pressWaiting();
+}
+
 #ifdef VOISTIC_BOARD_C6
 TaskHandle_t waiter = nullptr;
 
@@ -486,11 +694,21 @@ void IRAM_ATTR onWaitingPress() {
 bool waitConnected(uint32_t limitMs) {
 #ifdef VOISTIC_MIC
   micStop();
+  for (int i = 0; !micIdle() && i < 100; ++i) {
+    delay(2);  // the battery shares the ADC
+  }
 #endif
+  // Measured now rather than after the wake, so the microphone can start first
+  // then. The next press reports it.
+  boardMeasureBattery();
   ledsStop();
   WiFi.setSleep(true);
   waiter = xTaskGetCurrentTaskHandle();
   detachInterrupt(digitalPinToInterrupt(kButtonPin));
+  // A press that came, and maybe went, while this was setting up is in the
+  // buffer with its times. It's replayed as one from waiting ready, from the
+  // button up: the wake's own start would come after its edges.
+  nextFromReady = edgeTail != edgeHead;
   ulTaskNotifyTake(pdTRUE, 0);  // nothing left over from before
   attachInterrupt(digitalPinToInterrupt(kButtonPin), onWaitingPress, ONLOW_WE);
   esp_sleep_enable_gpio_wakeup();
@@ -498,8 +716,8 @@ bool waitConnected(uint32_t limitMs) {
   boardAllowLightSleep(true);
 
   const uint32_t start = millis();
-  bool pressed = false;
-  while (millis() - start < limitMs) {
+  bool pressed = nextFromReady;
+  while (!pressed && millis() - start < limitMs) {
     if (buttonDown()) {
       pressed = true;
       break;
@@ -510,17 +728,20 @@ bool waitConnected(uint32_t limitMs) {
     ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(5000));
   }
 
+  wakeMs = millis();
   boardAllowLightSleep(false);
   detachInterrupt(digitalPinToInterrupt(kButtonPin));
   attachInterrupt(digitalPinToInterrupt(kButtonPin), onButtonEdge, CHANGE);
+#ifdef VOISTIC_MIC
+  if (pressed) {
+    micStart();  // first, since the voice is already coming
+  }
+#endif
   WiFi.setSleep(false);
   ledsBegin();
   Serial.printf("wait: %s after %lu s\n",
                 pressed ? "pressed" : (WiFi.status() == WL_CONNECTED ? "time is up" : "Wi-Fi lost"),
                 static_cast<unsigned long>((millis() - start) / 1000));
-  if (pressed) {
-    boardMeasureBattery();
-  }
   return pressed;
 }
 #endif
@@ -550,27 +771,25 @@ void setup() {
   // The level read before anything slow, so a short press isn't missed.
   detector = new GestureDetector(downAtStartup, wokenByPress, startupMs);
   supervisor = xTaskGetCurrentTaskHandle();
-  cycleOnTask = kBoardStaysConnected;
-  if (cycleOnTask) {
-    startCycleTask(/*first=*/true);
-  } else {
-    beginFirstCycle();
-  }
+  startCycleTask(/*first=*/true);
 }
 
 void loop() {
-  if (!cycleOnTask) {
-    runCycle();
+  ulTaskNotifyTake(pdTRUE, portMAX_DELAY);  // the press's task has ended
+  const int ready = clientReadySeconds();
+  if (waitReady(ready >= 0 ? ready * 1000UL : kDefaultReadyMs)) {
+    nextFromReady = true;
+    startCycleTask(/*first=*/false);
     return;
   }
 #ifdef VOISTIC_BOARD_C6
-  ulTaskNotifyTake(pdTRUE, portMAX_DELAY);  // the press's task has ended
   const int seconds = clientAwakeSeconds();
   const uint32_t limitMs = seconds >= 0 ? seconds * 1000UL : kDefaultStayConnectedMs;
-  if (limitMs == 0 || !waitConnected(limitMs)) {
-    WiFi.disconnect(/*wifioff=*/true);
-    sleepNow();
+  if (limitMs > 0 && waitConnected(limitMs)) {
+    startCycleTask(/*first=*/false);  // waitConnected says how it starts
+    return;
   }
-  startCycleTask(/*first=*/false);
 #endif
+  WiFi.disconnect(/*wifioff=*/true);
+  sleepNow();
 }

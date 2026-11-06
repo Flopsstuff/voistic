@@ -221,6 +221,10 @@ void ledsSet(Led led, bool half) {
 
 void ledsSetBrightness(float value) { brightness = value; }
 
+float ledsBrightness() { return brightness; }
+
+bool ledsDone() { return finished; }
+
 void ledsWait() {
   while (!finished) {
     delay(kFrameMs);

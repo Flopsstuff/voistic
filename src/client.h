@@ -18,6 +18,13 @@ void clientSaveBrightness(float brightness);
 // Reports whether this button has a key from a server.
 bool clientIsPaired();
 
+// Where the paired server was last reached, as host:port, or empty.
+String clientServer();
+
+// Takes a key and the server's address handed over USB by voistic usb pair, in
+// place of pairing over the network. Returns false for a malformed key.
+bool clientAdopt(const String& hexKey, const String& host, uint16_t port);
+
 // Sends the server one throwaway packet, so its address is resolved before a
 // gesture needs it. Sleep clears the ARP table, and the server hears the query
 // only when its own Wi-Fi power saving lets it, which delayed the connection by
@@ -60,6 +67,10 @@ bool clientPair(uint32_t timeoutMs, bool (*cancelled)());
 // How long the server wants this button to stay connected after a press, from
 // the last verified answer, or -1 if none said.
 int clientAwakeSeconds();
+
+// How long the server wants this button to stay fully awake after a press, for
+// a quick next one, from the last verified answer, or -1 if none said.
+int clientReadySeconds();
 
 // Gives up the key before pairing again. The key stays if the server can't be
 // reached, so a failed attempt doesn't cost a working button.
