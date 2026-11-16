@@ -140,6 +140,8 @@ voistic usb setup
 
 Press the button once if it's asleep, so its port appears. `voistic usb` restarts it and keeps it awake, with its button ignored, until it's done. `voistic usb help` lists the rest: another network, the brightness, a firmware, its log, a reset.
 
+A XIAO button that does nothing on a press after its battery ran flat, even once charged, is stuck in its chip's ROM loader. Plug it in and run `voistic usb status`, which restarts it into its firmware, or press its reset button.
+
 Without USB, pair a button by running `voistic pair` on the computer it should belong to, and within two minutes start pairing on the button. A new button does that on its first press, any other with 5 short presses and a 5 s hold on the sixth. The button only ever talks to that computer, so several computers and several buttons can share a network.
 
 ## Server commands

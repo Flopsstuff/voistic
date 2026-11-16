@@ -170,6 +170,9 @@ func connect(ctx context.Context, verbose bool) (*usb.Board, usb.Status, error) 
 	if errors.Is(err, context.DeadlineExceeded) {
 		return nil, status, errors.New("no button showed up on USB. Is the cable one for data?")
 	}
+	if board != nil && board.Rescued {
+		fmt.Println("It was stuck in its ROM loader, as after a flat battery, and is back in its firmware.")
+	}
 	return board, status, err
 }
 

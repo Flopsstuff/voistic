@@ -31,6 +31,8 @@ const (
 // ErrGone means the board left USB, by sleeping or being unplugged.
 var ErrGone = errors.New("the board went off USB")
 
+var errSilent = errors.New("the board doesn't answer, is its firmware older than voistic usb?")
+
 // Status is what a button says about itself.
 type Status struct {
 	Device     string  `json:"device"`
@@ -51,6 +53,9 @@ type Status struct {
 // until End.
 type Board struct {
 	Port string
+	// Rescued says it was found in its ROM loader and restarted into its
+	// firmware, see loader.go.
+	Rescued bool
 	// Log gets every line the board prints that isn't an answer. May be nil.
 	Log func(string)
 
@@ -82,14 +87,21 @@ func open(name string) (serial.Port, error) {
 }
 
 // Connect finds a button, restarts it, so it's awake whatever it was doing, and
-// starts a session.
+// starts a session. One stuck in its ROM loader is restarted out of it.
 func Connect(ctx context.Context, log func(string)) (*Board, Status, error) {
 	name, err := WaitPort(ctx)
 	if err != nil {
 		return nil, Status{}, err
 	}
-	if err := restart(name); err != nil {
-		return nil, Status{}, fmt.Errorf("can't restart the board on %s: %w", name, err)
+	// Before the restart, since a firmware would take the question for noise.
+	_, rescued, err := leaveLoader(name)
+	if err != nil {
+		return nil, Status{}, fmt.Errorf("can't open the board on %s: %w", name, err)
+	}
+	if !rescued {
+		if err := restart(name); err != nil {
+			return nil, Status{}, fmt.Errorf("can't restart the board on %s: %w", name, err)
+		}
 	}
 
 	ctx, cancel := context.WithTimeout(ctx, reappearTimeout)
@@ -105,11 +117,18 @@ func Connect(ctx context.Context, log func(string)) (*Board, Status, error) {
 		}
 	}
 
-	b := &Board{Port: name, Log: log, port: port, lines: make(chan string, 256)}
+	b := &Board{Port: name, Rescued: rescued, Log: log, port: port, lines: make(chan string, 256)}
 	go b.read()
 	status, err := b.hello(ctx)
 	if err != nil {
 		b.port.Close()
+		if errors.Is(err, errSilent) {
+			// Still the loader, with a chip this can't restart or a BOOT pin
+			// that's really held.
+			if found, _, _ := leaveLoader(name); found {
+				return nil, Status{}, ErrInLoader
+			}
+		}
 		return nil, Status{}, err
 	}
 	return b, status, nil
@@ -184,7 +203,7 @@ func (b *Board) hello(ctx context.Context) (Status, error) {
 				return Status{}, err
 			}
 		case <-timeout:
-			return Status{}, errors.New("the board doesn't answer, is its firmware older than voistic usb?")
+			return Status{}, errSilent
 		case <-ctx.Done():
 			return Status{}, ctx.Err()
 		}

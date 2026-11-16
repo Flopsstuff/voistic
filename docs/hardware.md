@@ -93,6 +93,7 @@ Recording starts at the wake and goes into a 6 MB ring buffer in PSRAM, which ho
 - The NeoPixel is powered from 3V3 all the time and draws current even when dark, so it probably sets the battery life. The estimate is 0.5-1 mA, or 25-50 days on 600 mAh. **Nobody has measured the sleep current**, which takes a multimeter.
 - The charge level can't be read: `ADC_BAT` has no divider, and the charger status isn't wired to a GPIO.
 - The red charge LED is driven by the charger chip, not by firmware.
+- A battery that runs flat can leave the button deaf, even after charging. As the voltage collapses the chip resets, reads its BOOT pin as held and starts its ROM loader, where it waits for an image forever, awake. Charging doesn't reset it. `voistic usb status` restarts it into the firmware, and so does the reset button.
 
 ## Quirks
 

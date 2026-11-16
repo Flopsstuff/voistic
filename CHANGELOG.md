@@ -4,6 +4,14 @@ What changed in each release. The server and the firmware share a version,
 and every release has the server for each system and the firmware for each
 board, see [Releases](https://github.com/Flopsstuff/voistic/releases).
 
+## Unreleased
+
+- A XIAO button whose battery ran flat could come back deaf: nothing on a
+  press, even after charging. Its chip had started its ROM loader instead of
+  the firmware and waits there forever. Any `voistic usb` command now notices
+  that and restarts it into its firmware, so plug it in and run
+  `voistic usb status`. Its reset button does the same.
+
 ## v0.3.1, 2026-11-06
 
 - `groq.prompt` in the config is sent with every transcription: the names,
