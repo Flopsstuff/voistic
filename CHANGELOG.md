@@ -6,6 +6,12 @@ board, see [Releases](https://github.com/Flopsstuff/voistic/releases).
 
 ## Unreleased
 
+## v0.3.2, 2026-11-21
+
+Update the server with `voistic update`, which is all the loader rescue needs.
+Staying awake on USB is in the firmware: `voistic firmware <device> latest` and
+5 presses, or `voistic usb update` with the button plugged in.
+
 - A XIAO button whose battery ran flat could come back deaf: nothing on a
   press, even after charging. Its chip had started its ROM loader instead of
   the firmware and waits there forever. Any `voistic usb` command now notices
