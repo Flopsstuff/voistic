@@ -12,6 +12,8 @@
 // last one's answer or its green fade, are kept with their times and replayed.
 // After that a board that stays connected (board.h) waits for the next press
 // in light sleep with Wi-Fi up, and deep-sleeps after the server's awake_s.
+// While a computer is on USB the board doesn't deep-sleep at all, so the port
+// stays for `voistic usb`, with or without a network.
 
 #include <Arduino.h>
 #include <WiFi.h>
@@ -107,11 +109,16 @@ void readButton() {
 // Whether this press can end by waiting connected for the next one.
 bool canStayConnected() { return clientIsPaired() && WiFi.status() == WL_CONNECTED; }
 
+// Whether a computer is on the USB port. The host sends a frame every
+// millisecond, which a charger doesn't, so a charger alone doesn't count.
+bool computerOnUsb() { return Serial.isPlugged(); }
+
 // Shows the final state and ends this press's task, leaving the wait for the
 // next press to loop(). The outcome keeps fading meanwhile, and a press cuts it
 // short. Without the network there's nothing to wait for, so the board sleeps
-// once the button is up, since a held button would wake it again at once. A low
-// battery adds its warning, which waits for the fade.
+// once the button is up, since a held button would wake it again at once,
+// unless a computer is on USB, see waitOnUsb(). A low battery adds its warning,
+// which waits for the fade.
 [[noreturn]] void finish(Led outcome) {
   ledsSet(outcome);
   const bool stay = canStayConnected();
@@ -128,20 +135,17 @@ bool canStayConnected() { return clientIsPaired() && WiFi.status() == WL_CONNECT
     }
     ledsSet(Led::Off);
   }
-  if (stay) {
-    if (buttonDown()) {
-      // Still down from this press, such as a recording at its limit, which
-      // isn't the start of the next one.
-      while (buttonDown()) {
-        delay(10);
-      }
-      edgeTail = edgeHead;
+  if (buttonDown()) {
+    // Still down from this press, such as a recording at its limit, which
+    // isn't the start of the next one.
+    while (buttonDown()) {
+      delay(10);
     }
+    edgeTail = edgeHead;
+  }
+  if (stay || computerOnUsb()) {
     xTaskNotifyGive(supervisor);
     vTaskDelete(nullptr);
-  }
-  while (buttonDown()) {
-    delay(10);
   }
   sleepNow();
 }
@@ -677,6 +681,35 @@ bool waitReady(uint32_t limitMs) {
   return pressWaiting();
 }
 
+// Keeps the board awake for as long as a computer is on USB, where deep sleep
+// would take the port away, so `voistic usb` finds it whenever it's plugged in,
+// even with no network to wait on. Returns true on a press, false once the
+// computer is gone.
+bool waitOnUsb() {
+  if (!computerOnUsb()) {
+    return false;
+  }
+  if (WiFi.status() != WL_CONNECTED) {
+    // Off, or still trying a network that isn't there: a press starts afresh.
+    WiFi.disconnect(/*wifioff=*/true);
+    linkStarted = false;
+  }
+  Serial.println("usb: a computer is on the port, staying awake");
+  while (computerOnUsb()) {
+    if (pressWaiting()) {
+      if (WiFi.status() != WL_CONNECTED) {
+        WiFi.disconnect(/*wifioff=*/true);
+        linkStarted = false;
+        warmedUp = false;
+      }
+      return true;
+    }
+    delay(5);
+  }
+  Serial.println("usb: the computer is gone");
+  return pressWaiting();
+}
+
 #ifdef VOISTIC_BOARD_C6
 TaskHandle_t waiter = nullptr;
 
@@ -785,11 +818,16 @@ void loop() {
 #ifdef VOISTIC_BOARD_C6
   const int seconds = clientAwakeSeconds();
   const uint32_t limitMs = seconds >= 0 ? seconds * 1000UL : kDefaultStayConnectedMs;
-  if (limitMs > 0 && waitConnected(limitMs)) {
+  if (limitMs > 0 && canStayConnected() && waitConnected(limitMs)) {
     startCycleTask(/*first=*/false);  // waitConnected says how it starts
     return;
   }
 #endif
+  if (waitOnUsb()) {
+    nextFromReady = true;
+    startCycleTask(/*first=*/false);
+    return;
+  }
   WiFi.disconnect(/*wifioff=*/true);
   sleepNow();
 }

@@ -11,6 +11,11 @@ board, see [Releases](https://github.com/Flopsstuff/voistic/releases).
   the firmware and waits there forever. Any `voistic usb` command now notices
   that and restarts it into its firmware, so plug it in and run
   `voistic usb status`. Its reset button does the same.
+- A button plugged into a computer stays awake for as long as it's plugged in,
+  so `voistic usb` always finds it after one press. Before, a button that
+  couldn't reach its network, such as one brought from another place, went
+  back to sleep within seconds and dropped off USB. A charger alone doesn't
+  keep it awake.
 
 ## v0.3.1, 2026-11-06
 

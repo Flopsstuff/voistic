@@ -86,10 +86,11 @@ The RGB LED shows the same colours as the XIAO's pixel. The red/blue LED beside 
 - The board measures its battery at each wake by closing the divider switch for a moment, and sends it with every press. `voistic devices` shows it.
 - Between presses it waits in automatic light sleep with Wi-Fi in power save. That needs ESP-IDF built with power management, which Arduino's own build lacks, so `env:c6` rebuilds it with [`sdkconfig.c6.defaults`](../sdkconfig.c6.defaults). The same file turns off the second-long check of a DHCP address.
 - No light sleep while USB is connected, so the port stays for logs and flashing. The Wi-Fi connection is kept all the same.
+- No deep sleep while a computer is on USB either, even without a network, so after one press `voistic usb` finds it for as long as it's plugged in. A charger alone doesn't count, since the board looks for the computer's USB frames.
 - In deep sleep the RGB LED's load switch and the microphone are off. **Nobody has measured the current** in either sleep yet.
 
 ## Quirks
 
 - The factory firmware is Seeed's Zigbee firmware. A full backup of the 4 MB flash was taken before replacing it.
 - After a crash or a reflash, the access point may still count the board as connected and refuse it once. The firmware tries again after a second.
-- Its log goes to USB, and the port follows the board in and out of deep sleep.
+- Its log goes to USB, and the port follows the board in and out of deep sleep. Plugging in doesn't wake a sleeping board: press it once.
